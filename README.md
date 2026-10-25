@@ -69,6 +69,43 @@ python tools/smoke_test.py [--full]   # 核心逻辑联网冒烟测试（清单/
 python tools/gui_smoke.py             # GUI 冒烟测试
 ```
 
+## 更新日志
+
+### v1.0.9
+- 修复：XSTS 授权只接受受众为 `rp://api.minecraftservices.com/` 的令牌——此前回退到
+  `http://xboxlive.com` 受众的令牌会导致 Minecraft 授权报 `Invalid app registration`
+- 修复：`login_with_xbox` 失败时给出可读原因；XSTS 失败时抛出真实错误码而非被回退掩盖
+
+### v1.0.8
+- 新增樱花二次元主题：dmoe.cc 随机壁纸作主页横幅与市场底图（压暗合成保证可读），
+  设置页可开关 / 换一张 / 自定义地址
+
+### v1.0.5 ~ v1.0.7
+- 数据包（Datapack）下载：自动列出存档选择目标世界，安装到 `saves/<世界>/datapacks/`
+- 恢复资源市场左右双栏布局；正式打包版默认隐藏备用授权（账户页右下角可开关）
+- 登录：本地回环授权码流支持 **PKCE (S256)**，兼容 SPA/Web/公共客户端三种平台配置
+- 登录：XSTS 请求改用 `SandboxId: RETAIL`（与 HMCL/minecraft-launcher-lib/官方一致）
+- 错误提示中文化：XErr 2148916242 / 2148916233 / 2148916238 等给出具体排查步骤
+
+### v1.0.0 ~ v1.0.4
+- 首个正式版：原版 + 9 种加载器安装、微软正版登录、Modrinth 市场（图标/文件列表/
+  标签/排序筛选）、整合包导入导出、世界导入、Java 管理、GitHub Actions 自动发布
+
+## 常见登录错误与解决（开发过程实录）
+
+| 错误 | 原因 | 解决 |
+|---|---|---|
+| `AADSTS900144: request body must contain 'client_id'` | MSA 端点只接受**表单编码**请求体，用 JSON 发送会被当作空请求体 | 改为 `application/x-www-form-urlencoded` |
+| `invalid_client`（随手填的 Client ID） | Azure 应用不存在 | 使用真实公共 Client ID 或自建应用 |
+| `The application is a first party application, the user does not have consent...` | 借用 Azure CLI 等第一方应用的 Client ID，用户无法为 Xbox Live 授权 | 换第三方应用（如 Prism 的公共 ID）或自建 |
+| `AADSTS70002: must be marked as 'mobile'`（设备代码流） | 应用未开启「允许公共客户端流」 | 应用注册 → 身份验证 → 允许公共客户端流 = 是 |
+| `Proof Key for Code Exchange is required` | 应用要求 PKCE（SPA 平台或策略强制） | 授权 URL 带 `code_challenge`+`S256`，换令牌带 `code_verifier` |
+| `AADSTS70002: must include a 'client_secret'` | 应用注册在「Web」平台（机密客户端） | 填入 Client Secret，或把重定向 URI 移到「移动和桌面应用」平台 |
+| `AADSTS50011: redirect URI mismatch` | 回调地址未注册 | 注册 `http://localhost`（不带端口）到「移动和桌面应用」平台 |
+| `XErr 2148916242` | Xbox Live 拒绝：账号地区不支持 / Xbox 档案问题。**挂 VPN 无效**（检查基于账号注册地区而非 IP） | account.microsoft.com 改地区 → xbox.com 登录创建档案；或用离线账号 |
+| `Invalid app registration`（login_with_xbox） | XSTS 令牌受众不对：用了 `RelyingParty: http://xboxlive.com` 签出的令牌去登 Minecraft | XSTS 只用 `RelyingParty: rp://api.minecraftservices.com/` + `SandboxId: RETAIL` |
+| OptiFine 安装后没有新版本目录 | OptiFine 无头安装器只认 `APPDATA` 定位游戏目录 | 子进程重定向 `APPDATA=<游戏根目录的上级>`，运行 `optifine.Installer QUIET` |
+
 ## 目录结构
 
 ```

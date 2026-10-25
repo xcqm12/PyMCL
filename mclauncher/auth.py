@@ -258,29 +258,21 @@ def xbl_authenticate(msa_token: str) -> str:
 
 
 def xsts_authenticate(xbl_token: str):
-    # 与 HMCL / minecraft-launcher-lib / Mojang 官方一致的参数；沙盒写法不对
-    # 会触发一些奇怪错误码（包括 2148916242），故按序回退。
-    variants = [
-        {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
-         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
-        {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
-         "RelyingParty": "http://xboxlive.com", "TokenType": "JWT"},
-        {"Properties": {"SandboxId": "XBOX.SERVICES", "UserTokens": [xbl_token]},
-         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
-    ]
-    last = {}
-    for payload in variants:
-        code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize",
-                                   payload, headers={"Accept": "application/json"})
-        if code == 200 and "Token" in data:
-            uhs = ""
-            try:
-                uhs = data["DisplayClaims"]["xui"][0]["uhs"]
-            except Exception:
-                pass
-            return uhs, data["Token"]
-        last = data
-    xerr = last.get("XErr")
+    """XSTS 授权。Minecraft 登录只接受受众为 rp://api.minecraftservices.com/ 的令牌；
+    其他 RelyingParty（如 http://xboxlive.com）签出的令牌拿去登 MC 会报
+    “Invalid app registration”，因此这里只用规范组合，失败时把真实错误抛出。"""
+    payload = {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
+               "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"}
+    code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize",
+                               payload, headers={"Accept": "application/json"})
+    if code == 200 and "Token" in data:
+        uhs = ""
+        try:
+            uhs = data["DisplayClaims"]["xui"][0]["uhs"]
+        except Exception:
+            pass
+        return uhs, data["Token"]
+    xerr = data.get("XErr")
     if xerr == 2148916233:
         raise AuthError("该微软账号还没有 Xbox 档案：请到 https://www.xbox.com "
                         "用此账号登录并按提示创建 Xbox 档案后重试")
@@ -289,14 +281,13 @@ def xsts_authenticate(xbl_token: str):
             "Xbox Live 拒绝了此账号（错误码 2148916242）。你的账号地区正常且已购买游戏的"
             "情况下仍出现此错误时，请依次检查：1) 到 https://www.xbox.com 登录并确认 "
             "Xbox 档案已创建、服务协议已接受；2) 用官方 Minecraft 启动器登录一次"
-            "（若官方也失败则是账号侧限制，与启动器无关）；3) 账号资料地区改动后需重新登录"
-            "一次 xbox 才会生效。或改用离线账号。")
+            "（若官方也失败则是账号侧限制，与启动器无关）。或改用离线账号。")
     if xerr == 2148916238:
         raise AuthError("该账号是儿童账号，需家长同意后才能登录")
     if xerr in (2148916235, 2148916236):
         raise AuthError("该账号的年龄或地区信息不符合 Xbox Live 要求，"
                         "请到 account.microsoft.com 个人信息中核对出生日期与国家/地区")
-    raise AuthError("XSTS 认证失败：" + str(xerr or last)[:200])
+    raise AuthError("XSTS 认证失败：" + str(xerr or data)[:200])
 
 
 def mc_login_with_xbox(uhs: str, xsts_token: str) -> dict:
@@ -304,7 +295,13 @@ def mc_login_with_xbox(uhs: str, xsts_token: str) -> dict:
         "https://api.minecraftservices.com/authentication/login_with_xbox",
         {"identityToken": f"XBL3.0 x={uhs};{xsts_token}"})
     if code != 200 or "access_token" not in data:
-        raise AuthError("Minecraft 授权失败：" + str(data.get("error", data))[:200])
+        msg = str(data.get("errorMessage") or data)
+        if "Invalid app registration" in msg:
+            raise AuthError(
+                "Minecraft 服务拒绝了本次授权（Invalid app registration）——"
+                "通常是 Xbox 令牌受众不正确（请更新启动器到最新版）；"
+                "也可能是该账号在当前地区无法获取 Minecraft 服务授权。原始信息：" + msg[:200])
+        raise AuthError("Minecraft 授权失败：" + msg[:200])
     return data
 
 
