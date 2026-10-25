@@ -258,34 +258,45 @@ def xbl_authenticate(msa_token: str) -> str:
 
 
 def xsts_authenticate(xbl_token: str):
-    code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize", {
-        "Properties": {"SandboxId": "XBOX.SERVICES", "UserTokens": [xbl_token]},
-        "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
-        headers={"Accept": "application/json"})
-    if code != 200 or "Token" not in data:
-        xerr = data.get("XErr")
-        if xerr == 2148916233:
-            raise AuthError("该微软账号还没有 Xbox 档案：请到 https://www.xbox.com "
-                            "用此账号登录并按提示创建 Xbox 档案后重试")
-        if xerr == 2148916242:
-            raise AuthError(
-                "该微软账号所在的国家/地区不支持 Xbox Live（错误码 2148916242，"
-                "常见于中国大陆注册的账号）。注意：挂 VPN/代理无效，"
-                "该检查基于账号资料里的注册地区而非 IP。解决：登录 account.microsoft.com "
-                "→ 个人信息 → 把「国家/地区」改为美国/日本/香港等，然后到 xbox.com "
-                "登录一次并创建 Xbox 档案，再回来重新登录；或者改用离线账号。")
-        if xerr == 2148916238:
-            raise AuthError("该账号是儿童账号，需家长同意后才能登录")
-        if xerr in (2148916235, 2148916236):
-            raise AuthError("该账号的年龄或地区信息不符合 Xbox Live 要求，"
-                            "请到 account.microsoft.com 个人信息中核对出生日期与国家/地区")
-        raise AuthError("XSTS 认证失败：" + str(xerr or data)[:200])
-    uhs = ""
-    try:
-        uhs = data["DisplayClaims"]["xui"][0]["uhs"]
-    except Exception:
-        pass
-    return uhs, data["Token"]
+    # 与 HMCL / minecraft-launcher-lib / Mojang 官方一致的参数；沙盒写法不对
+    # 会触发一些奇怪错误码（包括 2148916242），故按序回退。
+    variants = [
+        {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
+         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
+        {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
+         "RelyingParty": "http://xboxlive.com", "TokenType": "JWT"},
+        {"Properties": {"SandboxId": "XBOX.SERVICES", "UserTokens": [xbl_token]},
+         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
+    ]
+    last = {}
+    for payload in variants:
+        code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize",
+                                   payload, headers={"Accept": "application/json"})
+        if code == 200 and "Token" in data:
+            uhs = ""
+            try:
+                uhs = data["DisplayClaims"]["xui"][0]["uhs"]
+            except Exception:
+                pass
+            return uhs, data["Token"]
+        last = data
+    xerr = last.get("XErr")
+    if xerr == 2148916233:
+        raise AuthError("该微软账号还没有 Xbox 档案：请到 https://www.xbox.com "
+                        "用此账号登录并按提示创建 Xbox 档案后重试")
+    if xerr == 2148916242:
+        raise AuthError(
+            "Xbox Live 拒绝了此账号（错误码 2148916242）。你的账号地区正常且已购买游戏的"
+            "情况下仍出现此错误时，请依次检查：1) 到 https://www.xbox.com 登录并确认 "
+            "Xbox 档案已创建、服务协议已接受；2) 用官方 Minecraft 启动器登录一次"
+            "（若官方也失败则是账号侧限制，与启动器无关）；3) 账号资料地区改动后需重新登录"
+            "一次 xbox 才会生效。或改用离线账号。")
+    if xerr == 2148916238:
+        raise AuthError("该账号是儿童账号，需家长同意后才能登录")
+    if xerr in (2148916235, 2148916236):
+        raise AuthError("该账号的年龄或地区信息不符合 Xbox Live 要求，"
+                        "请到 account.microsoft.com 个人信息中核对出生日期与国家/地区")
+    raise AuthError("XSTS 认证失败：" + str(xerr or last)[:200])
 
 
 def mc_login_with_xbox(uhs: str, xsts_token: str) -> dict:
