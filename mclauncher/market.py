@@ -45,14 +45,43 @@ def icon_file(url: str | None, size: int = 52) -> Path | None:
 
 # ---------------- Modrinth 搜索 ----------------
 
+# 各类型的 Modrinth 分类标签（中文 -> slug），用于市场筛选
+TAGS = {
+    "mod": [("全部", None), ("优化", "optimization"), ("技术", "technology"),
+            ("魔法", "magic"), ("冒险", "adventure"), ("装饰", "decoration"),
+            ("装备", "equipment"), ("食物", "food"), ("实用", "utility"),
+            ("存储", "storage"), ("世界生成", "worldgen"), ("生物", "mobs"),
+            ("工具库", "library"), ("经济", "economy"), ("社交", "social"),
+            ("小游戏", "minigame")],
+    "shader": [("全部", None), ("写实", "realistic"), ("半写实", "semi-realistic"),
+               ("卡通", "cartoon"), ("二次元", "anime"), ("原版风格", "vanilla"),
+               ("梦幻", "fancy"), ("大气", "atmospheric"), ("程序化", "procedural")],
+    "resourcepack": [("全部", None), ("16x", "16x"), ("32x", "32x"), ("64x", "64x"),
+                     ("128x", "128x"), ("256x+", "256x+"), ("原版增强", "vanilla-like"),
+                     ("简约", "simplistic"), ("动画", "animated"), ("实用", "utility"),
+                     ("音效", "audio"), ("字体", "fonts"), ("GUI", "gui")],
+    "modpack": [("全部", None), ("生存", "survival"), ("科技", "technology"),
+                ("魔法", "magic"), ("冒险", "adventure"), ("空岛", "skyblock"),
+                ("探索", "exploration"), ("多人", "multiplayer"), ("轻量", "light"),
+                ("硬核", "hardcore"), ("任务", "quest"), ("科幻", "sci-fi")],
+}
+
+SORTS = [("默认", None), ("最多下载", "downloads"), ("最近更新", "updated"),
+         ("最新发布", "newest"), ("最多关注", "follows")]
+
+
 def search(query: str, ptype: str, game_version: str | None = None,
-           loader: str | None = None, offset: int = 0, limit: int = 20) -> list:
+           loader: str | None = None, category: str | None = None,
+           sort: str | None = None, offset: int = 0, limit: int = 20) -> list:
     facets = [["project_type:" + PROJECT_TYPES[ptype]]]
     if game_version:
         facets.append(["versions:" + game_version])
     if loader and ptype in ("mod", "modpack"):
         facets.append(["loaders:" + loader])
-    params = {"query": query, "limit": limit, "offset": offset, "index": "relevance",
+    if category:
+        facets.append(["categories:" + category])
+    index = sort or ("relevance" if query else "downloads")
+    params = {"query": query, "limit": limit, "offset": offset, "index": index,
               "facets": json.dumps(facets)}
     data = net.get_json(f"{MODRINTH}/search", params=params, mirror=False)
     return data.get("hits", [])
