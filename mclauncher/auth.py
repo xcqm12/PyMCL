@@ -247,32 +247,51 @@ def local_browser_login(client_id: str, on_url, timeout: float = 300) -> dict:
 # ---------------- XBox / Minecraft 链 ----------------
 
 def xbl_authenticate(msa_token: str) -> str:
-    code, data = net.post_json("https://user.auth.xboxlive.com/user/authenticate", {
-        "Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com",
-                       "RpsTicket": f"d={msa_token}"},
-        "RelyingParty": "http://auth.xboxlive.com", "TokenType": "JWT"},
-        headers={"Accept": "application/json"})
-    if code != 200 or "Token" not in data:
-        raise AuthError("Xbox Live 认证失败：" + str(data.get("XErr", data))[:200])
-    return data["Token"]
+    """XBL 用户令牌。对照 HMCL（带 RelyingParty auth.xboxlive.com）与
+    PCL CE（不带 RelyingParty）两种写法，依次尝试。"""
+    variants = [
+        {"Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com",
+                        "RpsTicket": f"d={msa_token}"},
+         "RelyingParty": "http://auth.xboxlive.com", "TokenType": "JWT"},
+        {"Properties": {"AuthMethod": "RPS", "SiteName": "user.auth.xboxlive.com",
+                        "RpsTicket": f"d={msa_token}"},
+         "TokenType": "JWT"},
+    ]
+    last = {}
+    for payload in variants:
+        code, data = net.post_json("https://user.auth.xboxlive.com/user/authenticate",
+                                   payload, headers={"Accept": "application/json"})
+        if code == 200 and "Token" in data:
+            return data["Token"]
+        last = data
+    raise AuthError("Xbox Live 认证失败：" + str(last.get("XErr", last))[:200])
 
 
 def xsts_authenticate(xbl_token: str):
-    """XSTS 授权。Minecraft 登录只接受受众为 rp://api.minecraftservices.com/ 的令牌；
-    其他 RelyingParty（如 http://xboxlive.com）签出的令牌拿去登 MC 会报
-    “Invalid app registration”，因此这里只用规范组合，失败时把真实错误抛出。"""
-    payload = {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
-               "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"}
-    code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize",
-                               payload, headers={"Accept": "application/json"})
-    if code == 200 and "Token" in data:
-        uhs = ""
-        try:
-            uhs = data["DisplayClaims"]["xui"][0]["uhs"]
-        except Exception:
-            pass
-        return uhs, data["Token"]
-    xerr = data.get("XErr")
+    """XSTS 授权（对照 PCL CE 与 HMCL 的实现）：
+    - HMCL:  SandboxId "RETAIL" + RelyingParty "rp://api.minecraftservices.com/"
+    - PCL CE: 不带 SandboxId   + RelyingParty "rp://api.minecraftservices.com/"
+    Minecraft 登录只接受受众为 rp://api.minecraftservices.com/ 的令牌，两种写法受众一致，
+    依次尝试；绝不回退到其他 RelyingParty（否则 MC 授权会报 Invalid app registration）。"""
+    variants = [
+        {"Properties": {"SandboxId": "RETAIL", "UserTokens": [xbl_token]},
+         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
+        {"Properties": {"UserTokens": [xbl_token]},
+         "RelyingParty": "rp://api.minecraftservices.com/", "TokenType": "JWT"},
+    ]
+    last = {}
+    for payload in variants:
+        code, data = net.post_json("https://xsts.auth.xboxlive.com/xsts/authorize",
+                                   payload, headers={"Accept": "application/json"})
+        if code == 200 and "Token" in data:
+            uhs = ""
+            try:
+                uhs = data["DisplayClaims"]["xui"][0]["uhs"]
+            except Exception:
+                pass
+            return uhs, data["Token"]
+        last = data
+    xerr = last.get("XErr")
     if xerr == 2148916233:
         raise AuthError("该微软账号还没有 Xbox 档案：请到 https://www.xbox.com "
                         "用此账号登录并按提示创建 Xbox 档案后重试")
@@ -287,7 +306,7 @@ def xsts_authenticate(xbl_token: str):
     if xerr in (2148916235, 2148916236):
         raise AuthError("该账号的年龄或地区信息不符合 Xbox Live 要求，"
                         "请到 account.microsoft.com 个人信息中核对出生日期与国家/地区")
-    raise AuthError("XSTS 认证失败：" + str(xerr or data)[:200])
+    raise AuthError("XSTS 认证失败：" + str(xerr or last)[:200])
 
 
 def mc_login_with_xbox(uhs: str, xsts_token: str) -> dict:
