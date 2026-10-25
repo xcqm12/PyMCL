@@ -6,7 +6,7 @@ import subprocess
 import time
 from pathlib import Path
 
-from . import config, versions
+from . import APP_NAME, __version__, config, versions
 from .downloads import DownloadManager
 
 CREATE_NO_WINDOW = 0x08000000
@@ -53,8 +53,8 @@ def build_tokens(merged: dict, vid: str, auth, game_dir: Path,
         "assets_index_name": idx_id,
         "game_assets": str(game_assets),
         "natives_directory": str(natives_dir),
-        "launcher_name": "PyMCL",
-        "launcher_version": "1.0.0",
+        "launcher_name": APP_NAME,
+        "launcher_version": __version__,
         "classpath_separator": ";",
         "library_directory": str(config.mc_root() / "libraries"),
     }

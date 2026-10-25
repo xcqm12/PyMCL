@@ -6,7 +6,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from mclauncher import auth, config, installers, javafind, launch, market, net, versions
+from mclauncher import APP_NAME, __version__, auth, config, installers, javafind, launch, market, net, versions
 from mclauncher.downloads import DownloadManager
 from . import theme
 from .theme import C, FONT, FONT_S, FONT_XS, FONT_B, FONT_LOG, flat_button, label, make_entry, make_text, panel
@@ -129,7 +129,7 @@ class App(tk.Tk):
         self.nav_acc_text = tk.Label(self.nav_account, text="未登录", bg=C["panel2"],
                                      fg=C["dim"], font=FONT_XS, anchor="w", padx=10, pady=8)
         self.nav_acc_text.pack(fill="x")
-        label(bottom, "PyMCL v1.0.0", color=C["dim"], font=FONT_XS).pack(pady=(10, 0))
+        label(bottom, f"{APP_NAME} v{__version__}", color=C["dim"], font=FONT_XS).pack(pady=(10, 0))
         self.refresh_nav_account()
 
     def _nav_hover(self, item, stripe, lbl, key, entered):

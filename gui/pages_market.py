@@ -53,6 +53,7 @@ class MarketPage(tk.Frame):
         self.tab = "mod"
         self.hits = []
         self.selected_pid = None
+        self._searched = False
         self._files = []          # 当前项目的全部文件
         self._rows = {}
         self._file_rows = {}
@@ -60,25 +61,28 @@ class MarketPage(tk.Frame):
         self._icon_refs = {}
         self._file_refs = set()
 
-        # ---- 顶栏：分类 + 搜索 ----
+        # ---- 顶栏：分类 / 搜索 / 筛选（分行，防 DPI 溢出） ----
         bar = panel(self)
         bar.pack(fill="x", padx=16, pady=(16, 6))
-        row = tk.Frame(bar, bg=C["panel"])
-        row.pack(fill="x", padx=12, pady=(10, 4))
+        row_tabs = tk.Frame(bar, bg=C["panel"])
+        row_tabs.pack(fill="x", padx=12, pady=(10, 2))
         self._tab_btns = {}
         for key, text in TABS:
-            b = flat_button(row, text, command=lambda k=key: self.set_tab(k), padx=14, pady=4,
+            b = flat_button(row_tabs, text, command=lambda k=key: self.set_tab(k), padx=14, pady=4,
                             font=FONT_S)
             b.pack(side="left", padx=(0, 6))
             self._tab_btns[key] = b
-        self.search_entry = make_entry(row, width=24)
-        self.search_entry.pack(side="left", padx=(14, 6))
-        self.search_entry.bind("<Return>", lambda e: self.do_search())
-        flat_button(row, "搜索", command=self.do_search, bg=C["accent"], padx=14).pack(side="left")
 
-        # ---- 筛选行：MC 版本 + 加载器 ----
+        row_search = tk.Frame(bar, bg=C["panel"])
+        row_search.pack(fill="x", padx=12, pady=(4, 4))
+        self.search_entry = make_entry(row_search)
+        self.search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8), ipady=4)
+        self.search_entry.bind("<Return>", lambda e: self.do_search())
+        flat_button(row_search, "搜索", command=self.do_search, bg=C["accent"],
+                    padx=18).pack(side="left")
+
         frow = tk.Frame(bar, bg=C["panel"])
-        frow.pack(fill="x", padx=12, pady=(0, 10))
+        frow.pack(fill="x", padx=12, pady=(2, 10))
         label(frow, "MC 版本:", color=C["dim"]).pack(side="left")
         self.ver_var = tk.StringVar(value="任何版本")
         self.ver_combo = ttk.Combobox(frow, textvariable=self.ver_var, state="readonly",
@@ -184,6 +188,8 @@ class MarketPage(tk.Frame):
                  "resourcepack": "安装到 resourcepacks 目录",
                  "modpack": "整合包安装为独立版本与独立游戏目录"}
         self.hint.config(text=hints[key])
+        if not self.hits and not self._searched:
+            self._fill_rows()
         self._render_files()
 
     def filter_base(self) -> str | None:
@@ -220,11 +226,14 @@ class MarketPage(tk.Frame):
         base = self.filter_base()
         loader = self.filter_loader()
         pid = self.selected_pid if refetch_files else None
+        if not q and not self.hits:
+            return  # 空关键词且从未搜过：保持欢迎页
 
         def task():
             try:
                 hits = market.search(q, self.tab, game_version=base, loader=loader)
                 self.hits = hits
+                self._searched = True
                 self.app.ui(self._fill_rows)
                 if pid:
                     files = market.project_versions(pid)
@@ -254,12 +263,39 @@ class MarketPage(tk.Frame):
         self._files = []
         self._selected_file = None
         if not self.hits:
-            label(self.list_frame, "没有结果", color=C["dim"], bg=C["bg"]).pack(
-                anchor="w", padx=8, pady=10)
+            if self._searched:
+                label(self.list_frame, "没有找到相关资源，换个关键词试试",
+                      color=C["dim"], bg=C["bg"], wraplength=260, justify="center").pack(
+                    pady=60)
+            else:
+                self._make_welcome()
             self.file_header.config(text="")
+            self._render_files()
             return
         for h in self.hits:
             self._make_row(h)
+
+    POPULAR = ["Sodium", "Iris", "JEI", "Create", "Lithium", "Distant Horizons"]
+
+    def _make_welcome(self):
+        box = tk.Frame(self.list_frame, bg=C["bg"])
+        box.pack(fill="x", pady=48, padx=12)
+        label(box, "资源市场", color=C["fg"], bg=C["bg"],
+              font=("Microsoft YaHei UI", 12, "bold"), justify="center").pack()
+        label(box, "在上方输入关键词搜索模组 / 光影 / 材质包 / 整合包\n"
+                   "或直接试试热门资源：",
+              color=C["dim"], bg=C["bg"], justify="center").pack(pady=(6, 14))
+        chips = tk.Frame(box, bg=C["bg"])
+        chips.pack()
+        for i, name in enumerate(self.POPULAR):
+            flat_button(chips, name, command=lambda n=name: self._quick_search(n),
+                        padx=10, pady=3, font=FONT_XS).grid(
+                row=i // 2, column=i % 2, padx=4, pady=4, sticky="nsew")
+
+    def _quick_search(self, name):
+        self.search_entry.delete(0, "end")
+        self.search_entry.insert(0, name)
+        self.do_search()
 
     def _make_row(self, hit):
         pid = hit.get("project_id")
@@ -355,10 +391,18 @@ class MarketPage(tk.Frame):
         self._file_rows.clear()
         self._file_refs.clear()
         self._selected_file = None
-        if not self._files or not self.selected_pid:
-            if self.selected_pid:
-                label(self.file_frame, "加载中…", color=C["dim"], bg=C["bg"]).pack(
-                    anchor="w", padx=8, pady=6)
+        if not self.selected_pid:
+            box = tk.Frame(self.file_frame, bg=C["bg"])
+            box.pack(fill="x", pady=70, padx=16)
+            label(box, "文件列表", color=C["fg"], bg=C["bg"],
+                  font=("Microsoft YaHei UI", 12, "bold"), justify="center").pack()
+            label(box, "在左侧选择一个项目后，这里会列出它的全部版本文件\n"
+                       "单击选中、双击安装；顶部的版本/加载器筛选同样生效",
+                  color=C["dim"], bg=C["bg"], justify="center").pack(pady=(6, 0))
+            return
+        if not self._files:
+            label(self.file_frame, "加载中…", color=C["dim"], bg=C["bg"]).pack(
+                anchor="w", padx=8, pady=6)
             return
         base = self.filter_base()
         loader = self.filter_loader()
