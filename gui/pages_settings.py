@@ -93,16 +93,22 @@ class SettingsPage(tk.Frame):
         # 正版登录
         add_title("正版登录")
         self.cid_var = tk.StringVar(value=config.get("msa_client_id", ""))
-        add_row("Azure Client ID", make_entry(inner, textvariable=self.cid_var, width=46))
         self.secret_var = tk.StringVar(value=config.get("msa_client_secret", ""))
-        add_row("Azure 密钥(可选)", make_entry(inner, textvariable=self.secret_var, width=46,
-                                              show="•"))
-        label(inner, "默认使用 Prism Launcher 的公共 Client ID（第三方应用，用户可直接授权）。"
-                     "如遇到限流或想独立管理，可在 Azure 门户注册「公共客户端」应用"
-                     "（启用设备代码流、添加 XboxLive.signin 委托权限）后填入自己的 Client ID；"
-                     "若应用的重定向 URI 在「Web」平台（机密客户端），需同时填入密钥。",
-              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
-            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        if config.get("show_backup_auth"):
+            add_row("Azure Client ID", make_entry(inner, textvariable=self.cid_var, width=46))
+            add_row("Azure 密钥(可选)", make_entry(inner, textvariable=self.secret_var, width=46,
+                                                  show="•"))
+            label(inner, "默认使用 Prism Launcher 的公共 Client ID（第三方应用，用户可直接授权）。"
+                         "如遇到限流或想独立管理，可在 Azure 门户注册「公共客户端」应用"
+                         "（启用设备代码流、添加 XboxLive.signin 委托权限）后填入自己的 Client ID；"
+                         "若应用的重定向 URI 在「Web」平台（机密客户端），需同时填入密钥。",
+                  color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+                row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        else:
+            label(inner, "备用授权（自建 Azure 应用）设置已隐藏——正式版默认不显示，"
+                         "需要时到「账户」页右下角点「显示备用登录选项」开启。",
+                  color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+                row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
         r += 1
 
         # 保存

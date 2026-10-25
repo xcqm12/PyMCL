@@ -18,7 +18,23 @@ PROJECT_TYPES = {
     "shader": "shader",
     "resourcepack": "resourcepack",
     "modpack": "modpack",
+    "datapack": "datapack",
 }
+
+
+def list_worlds(game_dir: Path) -> list:
+    """列出存档世界 [(名称, 目录)]，按最近修改排序。"""
+    saves = game_dir / "saves"
+    out = []
+    try:
+        if saves.exists():
+            worlds = [d for d in saves.iterdir()
+                      if d.is_dir() and (d / "level.dat").exists()]
+            worlds.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+            out = [(d.name, d) for d in worlds]
+    except Exception:
+        pass
+    return out
 
 
 def icon_file(url: str | None, size: int = 52) -> Path | None:
@@ -66,6 +82,8 @@ TAGS = {
                 ("硬核", "hardcore"), ("任务", "quest"), ("科幻", "sci-fi")],
 }
 
+TAGS["datapack"] = TAGS["mod"]
+
 SORTS = [("默认", None), ("最多下载", "downloads"), ("最近更新", "updated"),
          ("最新发布", "newest"), ("最多关注", "follows")]
 
@@ -73,7 +91,11 @@ SORTS = [("默认", None), ("最多下载", "downloads"), ("最近更新", "upda
 def search(query: str, ptype: str, game_version: str | None = None,
            loader: str | None = None, category: str | None = None,
            sort: str | None = None, offset: int = 0, limit: int = 20) -> list:
-    facets = [["project_type:" + PROJECT_TYPES[ptype]]]
+    if ptype == "datapack":
+        # Modrinth 上数据包是带 datapack 加载器标签的 mod 项目
+        facets = [["project_type:mod"], ["loaders:datapack"]]
+    else:
+        facets = [["project_type:" + PROJECT_TYPES[ptype]]]
     if game_version:
         facets.append(["versions:" + game_version])
     if loader and ptype in ("mod", "modpack"):

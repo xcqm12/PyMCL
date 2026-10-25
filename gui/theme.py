@@ -45,9 +45,9 @@ def primary_button(parent, text, command=None, font=None, padx=18, pady=7):
                        font=font or FONT_B, padx=padx, pady=pady)
 
 
-def ghost_button(parent, text, command=None, padx=12, pady=5):
+def ghost_button(parent, text, command=None, padx=12, pady=5, **kw):
     return flat_button(parent, text, command, bg=C["panel"], fg=C["dim"],
-                       padx=padx, pady=pady)
+                       padx=padx, pady=pady, **kw)
 
 
 def danger_button(parent, text, command=None, padx=12, pady=5):

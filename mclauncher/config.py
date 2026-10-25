@@ -32,6 +32,8 @@ DEFAULTS = {
     "active_account": 0,
     "window_width": 1020,
     "window_height": 660,
+    # 正式打包版默认隐藏备用授权设置，开发运行默认显示；账户页可手动切换
+    "show_backup_auth": not getattr(sys, "frozen", False),
 }
 
 

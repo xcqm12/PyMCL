@@ -3,7 +3,8 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 
 from mclauncher import auth, config
-from .theme import C, FONT, FONT_S, FONT_B, flat_button, label, make_entry, make_text, panel
+from .theme import (C, FONT, FONT_S, FONT_B, FONT_XS,
+                    flat_button, ghost_button, label, make_entry, make_text, panel)
 import webbrowser
 
 
@@ -221,26 +222,58 @@ class AccountsPage(tk.Frame):
                                   activestyle="none")
         self.listbox.pack(fill="both", expand=True, padx=12, pady=8)
 
-        btns = tk.Frame(p, bg=C["panel"])
-        btns.pack(fill="x", padx=12, pady=(4, 12))
-        flat_button(btns, "添加微软正版账号", command=self.add_microsoft,
-                    bg=C["accent"], padx=12).pack(side="left")
-        flat_button(btns, "自建 Azure 授权登录（备用）", command=self.add_microsoft_local,
+        self.btns = tk.Frame(p, bg=C["panel"])
+        self.btns.pack(fill="x", padx=12, pady=(4, 12))
+        self.btn_msa = flat_button(self.btns, "添加微软正版账号", command=self.add_microsoft,
+                                   bg=C["accent"], padx=12)
+        self.btn_msa.pack(side="left")
+        self.btn_backup = flat_button(self.btns, "自建 Azure 授权登录（备用）",
+                                      command=self.add_microsoft_local, padx=12)
+        flat_button(self.btns, "添加离线账号", command=self.add_offline,
                     padx=12).pack(side="left", padx=8)
-        flat_button(btns, "添加离线账号", command=self.add_offline,
-                    padx=12).pack(side="left", padx=8)
-        flat_button(btns, "设为当前账号", command=self.set_active, padx=12).pack(side="left", padx=8)
-        flat_button(btns, "删除", command=self.remove, padx=12).pack(side="left", padx=8)
+        flat_button(self.btns, "设为当前账号", command=self.set_active, padx=12).pack(side="left", padx=8)
+        flat_button(self.btns, "删除", command=self.remove, padx=12).pack(side="left", padx=8)
 
-        tip = label(p, "「添加微软正版账号」使用设备代码流程（推荐）：点击后打开浏览器，"
-                       "登录你的 Microsoft 账号并输入代码即可，需要已购买 Minecraft Java 版。\n"
-                       "若公共授权被限流或被拒绝，请改用「自建 Azure 授权登录」："
-                       "在 Azure 门户免费注册一个自己的应用（约 2 分钟），按窗口内提示操作。",
-                    color=C["dim"], wraplength=820, justify="left")
-        tip.pack(anchor="w", padx=12, pady=(0, 12))
+        self.backup_tip = label(
+            p, "「自建 Azure 授权登录」使用你自己注册的 Azure 应用（授权码流 + 本地回调），"
+               "公共授权被限流/拒绝时使用；Client ID 与密钥在窗口内填写。",
+            color=C["dim"], wraplength=820, justify="left")
+        self.main_tip = label(
+            p, "「添加微软正版账号」使用设备代码流程（推荐）：点击后打开浏览器，"
+               "登录你的 Microsoft 账号并输入代码即可，需要已购买 Minecraft Java 版。",
+            color=C["dim"], wraplength=820, justify="left")
+
+        bottom = tk.Frame(p, bg=C["panel"])
+        bottom.pack(fill="x", side="bottom", padx=12, pady=(0, 10))
+        self.adv_toggle = ghost_button(bottom, "", command=self.toggle_backup, padx=8, pady=2,
+                                       font=FONT_XS)
+        self.adv_toggle.pack(side="right")
+
+        self._apply_backup_visibility()
 
     def on_show(self):
         self.reload()
+        self._apply_backup_visibility()
+
+    def _backup_visible(self) -> bool:
+        return bool(config.get("show_backup_auth"))
+
+    def _apply_backup_visibility(self):
+        """按配置显示/隐藏备用授权入口（正式打包版默认隐藏）。"""
+        if self._backup_visible():
+            self.btn_backup.pack(side="left", after=self.btn_msa, padx=8)
+            self.main_tip.pack_forget()
+            self.backup_tip.pack(fill="x", padx=12, pady=(8, 0), after=self.btns)
+            self.adv_toggle.config(text="隐藏备用登录选项")
+        else:
+            self.btn_backup.pack_forget()
+            self.backup_tip.pack_forget()
+            self.main_tip.pack(fill="x", padx=12, pady=(8, 0), after=self.btns)
+            self.adv_toggle.config(text="显示备用登录选项（自建 Azure 授权）")
+
+    def toggle_backup(self):
+        config.set("show_backup_auth", not self._backup_visible())
+        self._apply_backup_visibility()
 
     def reload(self):
         self.listbox.delete(0, "end")

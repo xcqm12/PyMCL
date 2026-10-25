@@ -8,10 +8,12 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from mclauncher import config, market, net, packexport, versions
+from .pages_downloads import PickDialog
 from .theme import (C, FONT, FONT_S, FONT_XS, FONT_B,
                     flat_button, primary_button, ghost_button, label, make_entry, panel)
 
-TABS = [("mod", "模组"), ("shader", "光影"), ("resourcepack", "材质包"), ("modpack", "整合包")]
+TABS = [("mod", "模组"), ("modpack", "整合包"), ("datapack", "数据包"),
+        ("shader", "光影"), ("resourcepack", "材质包")]
 LOADERS = [("任何加载器", None), ("Fabric", "fabric"), ("Forge", "forge"),
            ("NeoForge", "neoforge"), ("Quilt", "quilt")]
 KNOWN_LOADERS = {"fabric", "forge", "neoforge", "quilt", "liteloader", "rift", "optifine", "iris"}
@@ -140,13 +142,18 @@ class MarketPage(tk.Frame):
         self.hint = label(row2, "", color=C["dim"])
         self.hint.pack(side="right", padx=(0, 10))
 
-        # ---- 主体：上项目列表（全宽行）/ 下文件列表 ----
-        paned = ttk.PanedWindow(self, orient="vertical", style="TPanedwindow")
-        paned.pack(fill="both", expand=True, padx=16, pady=6)
+        # ---- 主体：左项目卡片 / 右文件列表 ----
+        main = tk.Frame(self, bg=C["bg"])
+        main.pack(fill="both", expand=True, padx=16, pady=6)
+        main.columnconfigure(1, weight=1)
+        main.rowconfigure(0, weight=1)
 
-        proj = panel(paned)
-        self.pcanvas = tk.Canvas(proj, bg=C["bg"], highlightthickness=0, bd=0)
-        self.pvsb = ttk.Scrollbar(proj, orient="vertical", command=self.pcanvas.yview)
+        left = panel(main)
+        left.grid(row=0, column=0, sticky="nsw", padx=(0, 8))
+        left.configure(width=400)
+        left.grid_propagate(False)
+        self.pcanvas = tk.Canvas(left, bg=C["bg"], highlightthickness=0, bd=0)
+        self.pvsb = ttk.Scrollbar(left, orient="vertical", command=self.pcanvas.yview)
         self.pcanvas.configure(yscrollcommand=self.pvsb.set)
         self.pvsb.pack(side="right", fill="y")
         self.pcanvas.pack(fill="both", expand=True, padx=2, pady=2)
@@ -158,11 +165,12 @@ class MarketPage(tk.Frame):
             "<Configure>", lambda e: self.pcanvas.itemconfigure(self._list_win, width=e.width))
         self._bind_wheel(self.pcanvas)
 
-        files = panel(paned, height=280)
-        self.file_header = label(files, "在上方选择一个项目查看文件", color=C["dim"],
+        right = panel(main)
+        right.grid(row=0, column=1, sticky="nsew")
+        self.file_header = label(right, "在左侧选择一个项目查看文件", color=C["dim"],
                                  anchor="w", justify="left")
         self.file_header.pack(fill="x", padx=10, pady=(8, 4))
-        fwrap = tk.Frame(files, bg=C["bg"])
+        fwrap = tk.Frame(right, bg=C["bg"])
         fwrap.pack(fill="both", expand=True, padx=2, pady=(0, 2))
         self.fcanvas = tk.Canvas(fwrap, bg=C["bg"], highlightthickness=0, bd=0)
         self.fvsb = ttk.Scrollbar(fwrap, orient="vertical", command=self.fcanvas.yview)
@@ -176,8 +184,6 @@ class MarketPage(tk.Frame):
         self.fcanvas.bind(
             "<Configure>", lambda e: self.fcanvas.itemconfigure(self._file_win, width=e.width))
         self._bind_wheel(self.fcanvas)
-        paned.add(proj, weight=3)
-        paned.add(files, weight=2)
 
         # ---- 底部按钮 ----
         bottom = tk.Frame(self, bg=C["bg"])
@@ -220,16 +226,18 @@ class MarketPage(tk.Frame):
         self.tab = key
         for k, b in self._tab_btns.items():
             b.config(bg=C["sel"] if k == key else C["panel2"])
-        if self.tab in ("shader", "resourcepack"):
+        if self.tab in ("shader", "resourcepack", "datapack"):
             self.loader_combo.config(state="disabled")
             self.loader_var.set("任何加载器")
         else:
             self.loader_combo.config(state="readonly")
         self.tag_combo.config(values=[n for n, _ in market.TAGS[self.tab]])
         self.tag_var.set("全部")
-        hints = {"mod": "安装到所选版本的 mods 目录", "shader": "安装到 shaderpacks 目录",
-                 "resourcepack": "安装到 resourcepacks 目录",
-                 "modpack": "整合包安装为独立版本与独立游戏目录"}
+        hints = {"mod": "安装到所选版本的 mods 目录",
+                 "modpack": "整合包安装为独立版本与独立游戏目录",
+                 "datapack": "安装到所选世界存档的 datapacks 目录",
+                 "shader": "安装到 shaderpacks 目录",
+                 "resourcepack": "安装到 resourcepacks 目录"}
         self.hint.config(text=hints[key])
         self.do_search()  # 切分类自动加载热门列表
 
@@ -238,7 +246,7 @@ class MarketPage(tk.Frame):
         return None if v in ("任何版本", "") else v
 
     def filter_loader(self) -> str | None:
-        if self.tab in ("shader", "resourcepack"):
+        if self.tab in ("shader", "resourcepack", "datapack"):
             return None
         for name, val in LOADERS:
             if name == self.loader_var.get():
@@ -341,13 +349,18 @@ class MarketPage(tk.Frame):
         for i, cat in enumerate(cats):
             tk.Label(head, text=cat, bg=CHIP_COLORS[i % len(CHIP_COLORS)],
                      fg="#eef2f7", font=FONT_XS, padx=6).pack(side="left", padx=(8, 0), pady=1)
-        desc = label(info, (hit.get("description") or "")[:90], bg=C["panel"], color=C["dim"])
+        desc = label(info, (hit.get("description") or "")[:56], bg=C["panel"], color=C["dim"],
+                     wraplength=300, justify="left")
         desc.pack(anchor="w")
         loaders = " / ".join(c for c in (hit.get("categories") or [])
-                             if c in KNOWN_LOADERS) or "-"
-        meta = label(info, f"支持: {loaders}    ↓ {hit.get('downloads', 0):,}"
-                     f"    {rel_time(hit.get('date_modified'))}更新    Ⓜ Modrinth",
-                     bg=C["panel"], color=C["dim"], font=FONT_XS)
+                             if c in KNOWN_LOADERS)
+        meta_parts = []
+        if loaders:
+            meta_parts.append(loaders)
+        meta_parts.append(f"↓ {hit.get('downloads', 0):,}")
+        meta_parts.append(rel_time(hit.get("date_modified")))
+        meta = label(info, "  ·  ".join(meta_parts), bg=C["panel"], color=C["dim"],
+                     font=FONT_XS, wraplength=300, justify="left")
         meta.pack(anchor="w")
 
         widgets = [row, icon_box, icon_label, info, head, desc, meta]
@@ -502,6 +515,24 @@ class MarketPage(tk.Frame):
         if not vid:
             messagebox.showinfo("提示", "请先把「MC 版本」筛选选为一个已安装的版本作为安装目标。")
             return
+        if self.tab == "datapack":
+            # 数据包：选择目标世界存档
+            worlds = market.list_worlds(config.game_dir_for(vid))
+            if not worlds:
+                if messagebox.askyesno(
+                        "未找到存档",
+                        f"在 {config.game_dir_for(vid) / 'saves'} 下没有找到世界存档。\n"
+                        "是否手动选择一个世界文件夹（内含 level.dat）？"):
+                    d = filedialog.askdirectory(title="选择世界文件夹", parent=self.app)
+                    if not d:
+                        return
+                    self._run_install(pv, vid, base, Path(d) / "datapacks")
+                return
+            entries = [(n, str(p)) for n, p in worlds]
+            PickDialog(self.app, "选择要安装数据包的世界", entries,
+                       lambda wpath, disp: self._run_install(
+                           pv, vid, base, Path(wpath) / "datapacks"))
+            return
         if self.tab == "mod" and target_loader:
             lds = [str(l).lower() for l in (pv.get("loaders") or [])]
             if lds and target_loader not in lds:
@@ -510,7 +541,9 @@ class MarketPage(tk.Frame):
                         f"该文件需要 {'/'.join(lds)}，但所选版本 {vid} 是 {target_loader}。\n"
                         f"仍要安装吗？（可能导致游戏无法启动）"):
                     return
+        self._run_install(pv, vid, base, None)
 
+    def _run_install(self, pv, vid, base, datapacks_dir):
         def task():
             self.app.busy = True
             try:
@@ -527,6 +560,10 @@ class MarketPage(tk.Frame):
                         cache, self.app.dl, self.app.detect_and_pick_java(base),
                         on_status, on_update)
                     self.app.log(f"整合包安装完成：{new_vid}", "ok")
+                elif self.tab == "datapack":
+                    dest = market.install_asset({"id": self.selected_pid}, pv, datapacks_dir)
+                    self.app.log(f"数据包已安装到 {dest}（游戏内对该世界 "
+                                 f"/reload 或重进生效）", "ok")
                 else:
                     sub = {"mod": "mods", "shader": "shaderpacks",
                            "resourcepack": "resourcepacks"}[self.tab]
