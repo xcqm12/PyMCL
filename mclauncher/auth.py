@@ -1,4 +1,5 @@
-"""账号：微软正版登录（设备代码流 + 本地回环授权码流）、XBL/XSTS/MC 授权链、离线账号。"""
+"""账号：微软正版登录（设备代码流 + 本地回环授权码流 PKCE）、XBL/XSTS/MC 授权链、离线账号。"""
+import base64
 import hashlib
 import http.server
 import secrets
@@ -113,23 +114,38 @@ def msa_refresh(refresh_token: str, cid: str | None = None) -> dict:
     return data
 
 
-# ---------------- 备用：本地回环授权码流（用户自建 Azure 应用） ----------------
+# ---------------- 备用：本地回环授权码流（用户自建 Azure 应用，PKCE） ----------------
 
-def msa_authorize_url(client_id: str, redirect_uri: str, state: str) -> str:
-    q = urllib.parse.urlencode({
+def _pkce_pair() -> tuple:
+    """生成 PKCE code_verifier 与 S256 code_challenge。"""
+    verifier = base64.urlsafe_b64encode(secrets.token_bytes(48)).rstrip(b"=").decode()
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+    return verifier, challenge
+
+
+def msa_authorize_url(client_id: str, redirect_uri: str, state: str,
+                      code_challenge: str | None = None) -> str:
+    q = {
         "client_id": client_id,
         "response_type": "code",
         "redirect_uri": redirect_uri,
         "scope": SCOPE,
         "state": state,
         "prompt": "select_account",
-    })
-    return f"{MSA_TENANT}/authorize?{q}"
+    }
+    if code_challenge:
+        q["code_challenge"] = code_challenge
+        q["code_challenge_method"] = "S256"
+    return f"{MSA_TENANT}/authorize?{urllib.parse.urlencode(q)}"
 
 
-def msa_token_from_code(code: str, client_id: str, redirect_uri: str) -> dict:
+def msa_token_from_code(code: str, client_id: str, redirect_uri: str,
+                        code_verifier: str | None = None) -> dict:
     payload = {"grant_type": "authorization_code", "client_id": client_id,
                "code": code, "redirect_uri": redirect_uri, "scope": SCOPE}
+    if code_verifier:
+        payload["code_verifier"] = code_verifier
     secret = _client_secret()
     if secret:
         payload["client_secret"] = secret
@@ -141,6 +157,8 @@ def msa_token_from_code(code: str, client_id: str, redirect_uri: str) -> dict:
                 "该 Azure 应用要求提供客户端密钥：请在登录窗口的「Client Secret」栏填入"
                 "应用注册里的密钥；或者到应用注册 → 身份验证，把重定向 URI 平台改为"
                 "「移动应用程序和桌面应用程序」（公共客户端，无需密钥）。")
+        if "Proof Key" in desc or "PKCE" in desc.upper():
+            raise AuthError("该应用要求 PKCE，但本次请求未携带——请更新到最新版 PyMCL")
         raise AuthError("换取令牌失败：" + desc[:300])
     return data
 
@@ -215,14 +233,15 @@ class _LoopbackServer:
 
 
 def local_browser_login(client_id: str, on_url, timeout: float = 300) -> dict:
-    """备用登录：自建 Azure 应用的授权码流 + 本地回环回调。返回 MSA 令牌。"""
+    """备用登录：自建 Azure 应用的授权码流（PKCE）+ 本地回环回调。返回 MSA 令牌。"""
     state = secrets.token_urlsafe(16)
     server = _LoopbackServer(state)
     redirect_uri = f"http://localhost:{server.port}"
-    url = msa_authorize_url(client_id, redirect_uri, state)
+    verifier, challenge = _pkce_pair()
+    url = msa_authorize_url(client_id, redirect_uri, state, code_challenge=challenge)
     on_url(url, redirect_uri)
     code = server.wait_code(timeout)
-    return msa_token_from_code(code, client_id, redirect_uri)
+    return msa_token_from_code(code, client_id, redirect_uri, code_verifier=verifier)
 
 
 # ---------------- XBox / Minecraft 链 ----------------
