@@ -270,9 +270,10 @@ def xsts_authenticate(xbl_token: str):
         if xerr == 2148916242:
             raise AuthError(
                 "该微软账号所在的国家/地区不支持 Xbox Live（错误码 2148916242，"
-                "常见于中国大陆注册的账号）。解决：登录 account.microsoft.com → 个人信息 → "
-                "把「国家/地区」改为美国/日本/香港等，然后到 xbox.com 登录一次并创建 "
-                "Xbox 档案，再回来重新登录。")
+                "常见于中国大陆注册的账号）。注意：挂 VPN/代理无效，"
+                "该检查基于账号资料里的注册地区而非 IP。解决：登录 account.microsoft.com "
+                "→ 个人信息 → 把「国家/地区」改为美国/日本/香港等，然后到 xbox.com "
+                "登录一次并创建 Xbox 档案，再回来重新登录；或者改用离线账号。")
         if xerr == 2148916238:
             raise AuthError("该账号是儿童账号，需家长同意后才能登录")
         if xerr in (2148916235, 2148916236):
