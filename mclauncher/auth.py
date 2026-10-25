@@ -246,9 +246,19 @@ def xsts_authenticate(xbl_token: str):
     if code != 200 or "Token" not in data:
         xerr = data.get("XErr")
         if xerr == 2148916233:
-            raise AuthError("该微软账号没有 Xbox 账号，无法登录 Minecraft（请到 xbox.com 注册）")
+            raise AuthError("该微软账号还没有 Xbox 档案：请到 https://www.xbox.com "
+                            "用此账号登录并按提示创建 Xbox 档案后重试")
+        if xerr == 2148916242:
+            raise AuthError(
+                "该微软账号所在的国家/地区不支持 Xbox Live（错误码 2148916242，"
+                "常见于中国大陆注册的账号）。解决：登录 account.microsoft.com → 个人信息 → "
+                "把「国家/地区」改为美国/日本/香港等，然后到 xbox.com 登录一次并创建 "
+                "Xbox 档案，再回来重新登录。")
         if xerr == 2148916238:
             raise AuthError("该账号是儿童账号，需家长同意后才能登录")
+        if xerr in (2148916235, 2148916236):
+            raise AuthError("该账号的年龄或地区信息不符合 Xbox Live 要求，"
+                            "请到 account.microsoft.com 个人信息中核对出生日期与国家/地区")
         raise AuthError("XSTS 认证失败：" + str(xerr or data)[:200])
     uhs = ""
     try:
