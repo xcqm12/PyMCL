@@ -5,7 +5,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
 from mclauncher import config, javafind
-from .theme import C, FONT, FONT_S, flat_button, label, make_entry, panel
+from gui import theme_bg
+from .theme import C, FONT, FONT_S, flat_button, ghost_button, label, make_entry, panel
 
 
 class SettingsPage(tk.Frame):
@@ -111,6 +112,20 @@ class SettingsPage(tk.Frame):
                 row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
         r += 1
 
+        # 主题
+        add_title("主题")
+        self.anime_var = tk.BooleanVar(value=bool(config.get("anime_bg")))
+        ttk.Checkbutton(inner, text="樱花二次元随机背景（主页横幅与市场底图）",
+                        variable=self.anime_var,
+                        command=self._theme_toggled).grid(row=r, column=1, columnspan=2,
+                                                          sticky="w", pady=4)
+        r += 1
+        self.bg_url_var = tk.StringVar(value=config.get("bg_url", theme_bg.DEFAULT_URL))
+        trow = tk.Frame(inner, bg=C["panel"])
+        make_entry(trow, textvariable=self.bg_url_var, width=46).pack(side="left")
+        ghost_button(trow, "换一张", command=self._new_bg, padx=10, pady=2).pack(side="left", padx=6)
+        add_row("背景图地址", trow)
+
         # 保存
         btns = tk.Frame(inner, bg=C["panel"])
         btns.grid(row=r, column=0, columnspan=3, sticky="w", pady=(14, 0))
@@ -126,6 +141,7 @@ class SettingsPage(tk.Frame):
 
     def on_show(self):
         self.dir_var.set(config.get("mc_root"))
+        self.anime_var.set(bool(config.get("anime_bg")))
 
     def _browse_dir(self):
         d = filedialog.askdirectory(title="选择游戏根目录")
@@ -193,6 +209,21 @@ class SettingsPage(tk.Frame):
         d.mkdir(parents=True, exist_ok=True)
         os.startfile(d)
 
+    def _theme_toggled(self):
+        config.set("anime_bg", bool(self.anime_var.get()))
+        self.app.apply_theme()
+
+    def _new_bg(self):
+        config.set("bg_url", self.bg_url_var.get().strip())
+        def task():
+            ok = theme_bg.ensure_source(force=True, on_status=self.app.set_status)
+            if not ok:
+                self.app.set_status("背景图下载失败，请检查地址或网络", True)
+                return
+            self.app.ui(self.app.apply_theme)
+            self.app.set_status("已更换主题背景")
+        self.app.run_bg(task, "更换背景")
+
     def save(self):
         updates = {
             "mc_root": self.dir_var.get().strip(),
@@ -204,6 +235,7 @@ class SettingsPage(tk.Frame):
             "download_threads": max(1, int(self.threads_var.get())),
             "msa_client_id": self.cid_var.get().strip(),
             "msa_client_secret": self.secret_var.get().strip(),
+            "bg_url": self.bg_url_var.get().strip(),
         }
         if not updates["java_path"]:
             updates["java_path"] = ""

@@ -8,6 +8,7 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 
 from mclauncher import config, market, net, packexport, versions
+from gui import theme_bg
 from .pages_downloads import PickDialog
 from .theme import (C, FONT, FONT_S, FONT_XS, FONT_B,
                     flat_button, primary_button, ghost_button, label, make_entry, panel)
@@ -88,6 +89,8 @@ class MarketPage(tk.Frame):
         self._file_rows = {}
         self._selected_file = None
         self._icon_refs = {}
+        self._theme_items = {}    # canvas -> 背景图 item id
+        self._theme_last_size = {}
 
         # ---- 顶栏 ----
         bar = panel(self)
@@ -197,12 +200,38 @@ class MarketPage(tk.Frame):
         flat_button(bottom, "导入世界 (.zip / .mcworld 或 URL)",
                     command=self.import_world, padx=10).pack(side="left")
 
-    # ---------- 滚动 ----------
+    # ---------- 滚动与主题 ----------
 
     def _bind_wheel(self, canvas):
         canvas.bind("<Enter>", lambda e, c=canvas: c.bind_all("<MouseWheel>",
                    lambda ev, cc=c: cc.yview_scroll(-1 if ev.delta > 0 else 1, "units")))
         canvas.bind("<Leave>", lambda e: canvas.unbind_all("<MouseWheel>"))
+        canvas.bind("<Configure>", lambda e, c=canvas: self._on_canvas_resize(c))
+
+    def _on_canvas_resize(self, canvas):
+        w, h = canvas.winfo_width(), canvas.winfo_height()
+        last = self._theme_last_size.get(canvas)
+        if last and abs(w - last[0]) <= 40 and abs(h - last[1]) <= 40:
+            return
+        self._theme_last_size[canvas] = (w, h)
+        self.refresh_theme()
+
+    def refresh_theme(self):
+        """樱花主题：给两个列表画布铺压暗背景图（App.apply_theme 调用）。"""
+        for canvas in (self.pcanvas, self.fcanvas):
+            item = self._theme_items.get(canvas)
+            if item:
+                canvas.delete(item)
+                self._theme_items[canvas] = None
+            if not theme_bg.enabled():
+                continue
+            ph = theme_bg.photo_for((max(canvas.winfo_width(), 400),
+                                     max(canvas.winfo_height(), 200)))
+            if not ph:
+                continue
+            item = canvas.create_image(0, 0, anchor="nw", image=ph)
+            canvas.tag_lower(item)  # 置于列表窗口之下，卡片浮在背景上
+            self._theme_items[canvas] = item
 
     # ---------- 页面与筛选 ----------
 

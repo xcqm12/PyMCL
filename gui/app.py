@@ -7,6 +7,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 
 from mclauncher import APP_NAME, __version__, auth, config, installers, javafind, launch, market, net, versions
+from gui import theme_bg
 from mclauncher.downloads import DownloadManager
 from . import theme
 from .theme import C, FONT, FONT_S, FONT_XS, FONT_B, FONT_LOG, flat_button, label, make_entry, make_text, panel
@@ -75,6 +76,25 @@ class App(tk.Tk):
         self.show("home")
         self.refresh_versions()
         self.log("欢迎使用 PyMCL！首次使用请先到「下载」安装游戏版本。", "info")
+        self.apply_theme()
+
+    # ---------- 主题 ----------
+
+    def apply_theme(self):
+        """樱花主题开关/换图后统一刷新（含后台确保图片就绪）。"""
+        if theme_bg.enabled():
+            def task():
+                ok = theme_bg.ensure_source(force=False, on_status=self.set_status)
+                if not ok:
+                    self.set_status("主题背景下载失败（检查网络），已保持默认外观", True)
+                    return
+                self.ui(lambda: (self.pages["home"].refresh_theme(),
+                                 self.pages["market"].refresh_theme()))
+                self.ui(lambda: self.set_status("樱花主题已应用"))
+            self.run_bg(task, "应用主题")
+        else:
+            self.pages["home"].refresh_theme()
+            self.pages["market"].refresh_theme()
 
     # ---------- 基础设施 ----------
 

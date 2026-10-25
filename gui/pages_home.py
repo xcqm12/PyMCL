@@ -1,10 +1,11 @@
-"""主页：英雄区（版本+启动）、快捷操作、运行日志。"""
+"""主页：樱花主题横幅（可选）、英雄区（版本+启动）、快捷操作、运行日志。"""
 import os
 import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
 from mclauncher import auth, config, launch, versions
+from gui import theme_bg
 from .theme import (C, FONT, FONT_S, FONT_XS, FONT_B, FONT_XB,
                     flat_button, primary_button, ghost_button, label, make_text, card)
 
@@ -13,16 +14,35 @@ class HomePage(tk.Frame):
     def __init__(self, parent, app):
         super().__init__(parent, bg=C["bg"])
         self.app = app
+        self._banner_item = None
+        self._banner_acc = None
+        self._banner_last_w = None
 
-        # ---- 英雄区 ----
+        # ---- 樱花主题横幅 ----
         hero = card(self)
         hero.pack(fill="x", padx=16, pady=(16, 8))
-        hero.columnconfigure(1, weight=1)
+        self.banner = tk.Canvas(hero, height=190, highlightthickness=0, bd=0,
+                                bg=C["panel2"])
+        self.banner.pack(fill="x")
+        self.banner.create_text(17, 29, text="PyMCL", anchor="nw",
+                                font=("Microsoft YaHei UI", 16, "bold"), fill="#000000")
+        self.banner.create_text(16, 28, text="PyMCL", anchor="nw",
+                                font=("Microsoft YaHei UI", 16, "bold"), fill="#ffffff")
+        self._banner_acc = self.banner.create_text(
+            18, 172, text="", anchor="sw", font=FONT_S, fill="#000000")
+        self.banner_acc2 = self.banner.create_text(
+            17, 171, text="", anchor="sw", font=FONT_S, fill="#dfe6ee")
+        self.banner.bind("<Configure>", self._on_banner_resize)
+        self._banner_tip = self.banner.create_text(
+            0, 0, text="", anchor="nw", font=FONT_XS, fill="")
 
-        left = tk.Frame(hero, bg=C["panel"])
-        left.grid(row=0, column=0, sticky="nsew", padx=18, pady=16)
+        # ---- 内容行 ----
+        content = tk.Frame(hero, bg=C["panel"])
+        content.pack(fill="x")
+        left = tk.Frame(content, bg=C["panel"])
+        left.pack(side="left", fill="x", expand=True, padx=18, pady=12)
 
-        label(left, "开始游戏", font=FONT_XB).pack(anchor="w")
+        label(left, "开始游戏", font=FONT_B).pack(anchor="w")
         self.acc_chip = tk.Label(left, text="未登录", bg=C["panel2"], fg=C["dim"],
                                  font=FONT_XS, padx=8, pady=3)
         self.acc_chip.pack(anchor="w", pady=(8, 0))
@@ -40,8 +60,8 @@ class HomePage(tk.Frame):
         self.dir_label = label(left, "", color=C["dim"], font=FONT_XS)
         self.dir_label.pack(anchor="w", pady=(8, 0))
 
-        right = tk.Frame(hero, bg=C["panel"])
-        right.grid(row=0, column=2, sticky="nse", padx=18, pady=16)
+        right = tk.Frame(content, bg=C["panel"])
+        right.pack(side="right", padx=18, pady=12)
         self.launch_btn = primary_button(right, "▶  启 动 游 戏", command=self.do_launch,
                                          font=("Microsoft YaHei UI", 14, "bold"),
                                          padx=34, pady=12)
@@ -75,6 +95,46 @@ class HomePage(tk.Frame):
 
     def on_show(self):
         self.reload()
+        self.refresh_theme()
+
+    def _on_banner_resize(self, event):
+        w = event.width
+        if self._banner_last_w is None or abs(w - self._banner_last_w) > 40:
+            self._banner_last_w = w
+            self.refresh_theme()
+
+    def refresh_theme(self):
+        """应用/清除樱花主题横幅（由 App.apply_theme 调用）。"""
+        banner = self.banner
+        if self._banner_item:
+            banner.delete(self._banner_item)
+            self._banner_item = None
+        w = max(banner.winfo_width(), 600)
+        h = max(banner.winfo_height(), 190)
+        if not theme_bg.enabled():
+            banner.itemconfig(self._banner_tip, text="", fill="")
+            return
+        ph = theme_bg.photo_for((w, h))
+        if not ph:
+            banner.itemconfig(self._banner_tip,
+                              text="樱花主题背景下载中… 稍后自动显示", fill="#8b93a3")
+            banner.coords(self._banner_tip, 16, 80)
+            return
+        banner.itemconfig(self._banner_tip, text="", fill="")
+        banner.coords(self._banner_tip, 0, 0)
+        self._banner_item = banner.create_image(0, 0, anchor="nw", image=ph)
+        banner.tag_lower(self._banner_item)
+        self._update_banner_texts()
+
+    def _update_banner_texts(self):
+        account = config.active_account()
+        if account:
+            t = "微软正版" if account.get("type") == "msa" else "离线"
+            txt = f"{account.get('name', '?')}（{t}）"
+        else:
+            txt = "未登录 - 到「账户」页添加后即可启动"
+        self.banner.itemconfig(self._banner_acc, text=txt)
+        self.banner.itemconfig(self.banner_acc2, text=txt)
 
     def reload(self):
         vs = versions.installed_versions()
@@ -89,6 +149,7 @@ class HomePage(tk.Frame):
             self.acc_chip.config(text=f"{account.get('name')}（{t}）", fg=C["fg"])
         else:
             self.acc_chip.config(text="未登录 - 请到「账户」添加", fg=C["dim"])
+        self._update_banner_texts()
         self._update_dir()
 
     def _update_dir(self):
