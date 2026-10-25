@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 构建产物
+dist/
+build/
+*.spec
+
+# 运行时生成的资源（CI 与首次运行会自动生成）
+assets/
+
+# 本地数据与隐私（绝不提交：含账号令牌与 Azure 密钥）
+launcher.json
+accounts.json
+cache/
+.minecraft/
+*.log
+*.part

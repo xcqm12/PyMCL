@@ -1,0 +1,52 @@
+name: Build & Release
+
+on:
+  push:
+    branches: [ main, dev ]
+    tags: [ 'v*' ]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests pillow pyinstaller
+
+      - name: Generate logo assets
+        run: python tools/gen_logo.py
+
+      - name: Smoke test (offline part)
+        run: python -c "import ast, pathlib; [ast.parse(p.read_text(encoding='utf-8')) for p in pathlib.Path('.').rglob('*.py')]; print('syntax ok')"
+
+      - name: Build exe
+        run: >
+          python -m PyInstaller --noconfirm --onefile --windowed --clean
+          --name PyMCL --icon assets/logo.ico
+          --add-data "assets;assets" main.py
+
+      - name: Upload artifact (every build)
+        uses: actions/upload-artifact@v4
+        with:
+          name: PyMCL-windows
+          path: dist/PyMCL.exe
+          if-no-files-found: error
+
+      - name: Publish release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/PyMCL.exe
+          generate_release_notes: true
