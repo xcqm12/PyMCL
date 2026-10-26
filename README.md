@@ -87,6 +87,12 @@ python tools/gui_smoke.py             # GUI 冒烟测试
 - 登录：XSTS 请求改用 `SandboxId: RETAIL`（与 HMCL/minecraft-launcher-lib/官方一致）
 - 错误提示中文化：XErr 2148916242 / 2148916233 / 2148916238 等给出具体排查步骤
 
+### v1.1.0 ~ v1.1.1
+- 对照 PCL CE / HMCL 源码对齐 Xbox 认证：XSTS 支持 PCL 式无 SandboxId 写法回退，
+  XBL 支持无 RelyingParty 回退（受众始终为 rp://api.minecraftservices.com/）
+- 自建 Azure 应用被 Minecraft 服务拒绝（Invalid app registration：应用需通过 Mojang
+  企业审核）时，自动改用公共 Client ID 重走登录
+
 ### v1.0.0 ~ v1.0.4
 - 首个正式版：原版 + 9 种加载器安装、微软正版登录、Modrinth 市场（图标/文件列表/
   标签/排序筛选）、整合包导入导出、世界导入、Java 管理、GitHub Actions 自动发布
@@ -103,7 +109,7 @@ python tools/gui_smoke.py             # GUI 冒烟测试
 | `AADSTS70002: must include a 'client_secret'` | 应用注册在「Web」平台（机密客户端） | 填入 Client Secret，或把重定向 URI 移到「移动和桌面应用」平台 |
 | `AADSTS50011: redirect URI mismatch` | 回调地址未注册 | 注册 `http://localhost`（不带端口）到「移动和桌面应用」平台 |
 | `XErr 2148916242` | Xbox Live 拒绝：账号地区不支持 / Xbox 档案问题。**挂 VPN 无效**（检查基于账号注册地区而非 IP） | account.microsoft.com 改地区 → xbox.com 登录创建档案；或用离线账号 |
-| `Invalid app registration`（login_with_xbox） | XSTS 令牌受众不对：用了 `RelyingParty: http://xboxlive.com` 签出的令牌去登 Minecraft | XSTS 只用 `RelyingParty: rp://api.minecraftservices.com/` + `SandboxId: RETAIL` |
+| `Invalid app registration`（login_with_xbox） | ① XSTS 令牌受众不对（用了 `http://xboxlive.com` 等 RP 签出的令牌）；② 自建 Azure 应用未通过 Mojang 的应用注册审核（需企业 D-U-N-S 认证，个人无法申请） | ① XSTS 只用 `rp://api.minecraftservices.com/` 受众（HMCL/PCL 同款）；② 启动器自动回退到 Prism 公共 Client ID 重新登录 |
 | OptiFine 安装后没有新版本目录 | OptiFine 无头安装器只认 `APPDATA` 定位游戏目录 | 子进程重定向 `APPDATA=<游戏根目录的上级>`，运行 `optifine.Installer QUIET` |
 
 ## 目录结构

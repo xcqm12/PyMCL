@@ -186,13 +186,31 @@ class MsaLocalDialog(tk.Toplevel):
                 account = auth.full_login_from_msa(tokens["access_token"],
                                                    tokens.get("refresh_token", ""), cid)
             except Exception as e:
-                self.app.ui(lambda: self.status.config(
-                    text=f"状态：失败 - {str(e)[:160]}",
-                    fg=C["danger"]))
-                self.app.ui(lambda: self.cid_entry.config(state="normal"))
-                self.app.ui(lambda: self.secret_entry.config(state="normal"))
-                finish_msa_login(self.app, None, str(e))
-                return
+                if "Invalid app registration" in str(e) and cid != auth.DEFAULT_CLIENT_ID:
+                    # 自建应用未通过 Mojang 应用注册审核：自动改用公共 Client ID 重来
+                    self.app.ui(lambda: self.status.config(
+                        text="状态：自建应用未通过 Mojang 审核（Invalid app registration），"
+                             "已自动改用公共 Client ID，请在浏览器中重新完成授权…"))
+                    try:
+                        tokens = auth.local_browser_login(auth.DEFAULT_CLIENT_ID, on_url,
+                                                          timeout=300)
+                        account = auth.full_login_from_msa(
+                            tokens["access_token"], tokens.get("refresh_token", ""),
+                            auth.DEFAULT_CLIENT_ID)
+                    except Exception as e2:
+                        self.app.ui(lambda: self.status.config(
+                            text=f"状态：失败 - {str(e2)[:160]}", fg=C["danger"]))
+                        self.app.ui(lambda: self.cid_entry.config(state="normal"))
+                        self.app.ui(lambda: self.secret_entry.config(state="normal"))
+                        finish_msa_login(self.app, None, str(e2))
+                        return
+                else:
+                    self.app.ui(lambda: self.status.config(
+                        text=f"状态：失败 - {str(e)[:160]}", fg=C["danger"]))
+                    self.app.ui(lambda: self.cid_entry.config(state="normal"))
+                    self.app.ui(lambda: self.secret_entry.config(state="normal"))
+                    finish_msa_login(self.app, None, str(e))
+                    return
             self.app.ui(lambda: (self.grab_release(), self.destroy()))
             finish_msa_login(self.app, account, None)
 

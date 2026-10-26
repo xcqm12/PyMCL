@@ -52,8 +52,8 @@ def _client_secret() -> str:
 
 # ---------------- MSA OAuth ----------------
 
-def device_code_start() -> dict:
-    cid = _client_id()
+def device_code_start(cid: str | None = None) -> dict:
+    cid = cid or _client_id()
     code, data = net.post_json(f"{MSA_TENANT}/devicecode", {
         "client_id": cid, "scope": SCOPE}, form=True)
     # 用户自建的 ID 未开启"允许公共客户端流"时自动回退到公共 ID，保证主登录始终可用
@@ -317,9 +317,9 @@ def mc_login_with_xbox(uhs: str, xsts_token: str) -> dict:
         msg = str(data.get("errorMessage") or data)
         if "Invalid app registration" in msg:
             raise AuthError(
-                "Minecraft 服务拒绝了本次授权（Invalid app registration）——"
-                "通常是 Xbox 令牌受众不正确（请更新启动器到最新版）；"
-                "也可能是该账号在当前地区无法获取 Minecraft 服务授权。原始信息：" + msg[:200])
+                "Invalid app registration：Minecraft 服务校验发起登录的 Azure 应用，"
+                "自建应用需要通过 Mojang 的应用注册审核（企业认证，个人无法申请）。"
+                "启动器将自动改用公共 Client ID 重新登录。原始信息：" + msg[:160])
         raise AuthError("Minecraft 授权失败：" + msg[:200])
     return data
 
@@ -349,16 +349,36 @@ def full_login_from_msa(msa_token: str, refresh_token: str = "", cid: str | None
             "mc_token_expire": time.time() + int(mc.get("expires_in", 86400)) - 120}
 
 
+def _msa_chain(cid: str, on_code) -> dict:
+    """完整的 MSA→Xbox→Minecraft 登录链（设备代码流）。"""
+    device = device_code_start(cid)
+    on_code(device.get("verification_uri", "https://www.microsoft.com/link"),
+            device.get("user_code", ""))
+    tokens = device_code_poll(device)
+    return full_login_from_msa(tokens["access_token"], tokens.get("refresh_token", ""),
+                               device.get("_cid"))
+
+
+def _is_app_registration_error(err: Exception) -> bool:
+    return "Invalid app registration" in str(err)
+
+
 def begin_microsoft_login(on_code, on_done):
-    """线程入口：on_code(url, user_code) 展示给用户；on_done(account|None, error|None)。"""
+    """线程入口：on_code(url, user_code) 展示给用户；on_done(account|None, error|None)。
+    自建 Azure 应用未通过 Mojang 应用注册审核时（Invalid app registration），
+    自动改用公共 Client ID 重走一遍登录。"""
     try:
-        device = device_code_start()
-        on_code(device.get("verification_uri", "https://www.microsoft.com/link"),
-                device.get("user_code", ""))
-        tokens = device_code_poll(device)
-        account = full_login_from_msa(tokens["access_token"], tokens.get("refresh_token", ""),
-                                      device.get("_cid"))
+        account = _msa_chain(_client_id(), on_code)
         on_done(account, None)
+    except AuthError as e:
+        if _is_app_registration_error(e) and _client_id() != DEFAULT_CLIENT_ID:
+            try:
+                account = _msa_chain(DEFAULT_CLIENT_ID, on_code)
+                on_done(account, None)
+            except Exception as e2:
+                on_done(None, str(e2))
+        else:
+            on_done(None, str(e))
     except Exception as e:
         on_done(None, str(e))
 
