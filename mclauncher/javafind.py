@@ -105,13 +105,23 @@ def required_major(mc_version: str) -> int:
     return 8
 
 
-def pick_java(javas: list, mc_version: str) -> dict | None:
-    need = required_major(mc_version)
+def pick_java_with_need(javas: list, need: int) -> dict | None:
+    """选满足 need 的最低版本（过新的 Java 会破坏老模组加载器的 JPMS 行为）。"""
     ok = [j for j in javas if j["major"] >= need]
     if ok:
         ok.sort(key=lambda x: x["major"])
         return ok[0]
     return javas[0] if javas else None
+
+
+def pick_java(javas: list, mc_version: str) -> dict | None:
+    return pick_java_with_need(javas, required_major(mc_version))
+
+
+def java_major(path: str) -> int:
+    v = _java_version(path) or ""
+    m = re.match(r"(\d+)", v)
+    return int(m.group(1)) if m else 0
 
 
 def java_for_installer(javas: list) -> str | None:

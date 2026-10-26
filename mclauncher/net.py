@@ -1,5 +1,7 @@
 """网络层：带 BMCLAPI 镜像回退的 HTTP 客户端与文件下载。"""
 import hashlib
+import os
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlparse
@@ -103,7 +105,9 @@ def download_stream(url: str, dest: Path, sha1: str | None = None, size: int | N
     errors = []
     for u in candidates(url):
         for attempt in range(3):
-            tmp = dest.with_suffix(dest.suffix + ".part")
+            # 唯一临时文件：资产表里同哈希条目会并发写同一目标，固定 .part 名会互相冲突
+            tmp = dest.with_suffix(
+                dest.suffix + f".part{os.getpid()}.{threading.get_ident()}.{time.time_ns()}")
             try:
                 with session.get(u, stream=True, timeout=(12, 60)) as r:
                     if r.status_code != 200:

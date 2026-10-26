@@ -118,14 +118,31 @@ def load_chain(vid: str) -> list:
 
 
 def merge_chain(chain: list) -> dict:
-    """从根(原版)到子版本逐层覆盖合并；库列表合并去重。"""
+    """从根(原版)到子版本逐层覆盖合并；库列表合并去重；
+    arguments.game/jvm 按 launcher 惯例拼接（父 + 子）——Forge 子 JSON 的 game
+    只有 --launchTarget/--fml.*，--accessToken 等在父（原版）JSON 里。"""
     merged: dict = {}
     for vj in reversed(chain):  # 根在前，子在后 -> 子覆盖父
         for k, v in vj.items():
-            if k in ("libraries", "inheritsFrom"):
+            if k in ("libraries", "inheritsFrom", "arguments"):
                 continue
             if v is not None and v != "":
                 merged[k] = v
+
+    args: dict = {}
+    for vj in reversed(chain):
+        a = vj.get("arguments")
+        if not isinstance(a, dict):
+            continue
+        for key in ("game", "jvm"):
+            if isinstance(a.get(key), list):
+                args[key] = args.get(key, []) + a[key]
+        for key, v in a.items():
+            if key not in ("game", "jvm"):
+                args[key] = v
+    if args:
+        merged["arguments"] = args
+
     libs = []
     names = set()
     for vj in reversed(chain):

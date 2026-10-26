@@ -298,17 +298,38 @@ class App(tk.Tk):
         except Exception:
             return None
 
+    def _declared_java_major(self, vid: str) -> int:
+        """版本 JSON 声明的 Java 大版本（Forge/原版都会写 javaVersion）。"""
+        try:
+            merged = versions.merge_chain(versions.load_chain(vid))
+            return int(((merged.get("javaVersion") or {}).get("majorVersion")) or 0)
+        except Exception:
+            return 0
+
     def detect_and_pick_java(self, mc_version: str | None = None) -> str | None:
+        """按版本声明的 Java 版本自动选择；旧设置里的自定义 Java 仅在其
+        大版本匹配声明时才生效（避免 Forge 1.20.1 跑在 Java 27 上崩溃这类问题）。"""
         custom = config.get("java_path")
-        if custom and Path(custom).exists():
-            return custom
+        custom = custom if (custom and Path(custom).exists()) else None
         javas = javafind.detect_javas()
         if not javas:
-            return None
-        if mc_version:
-            picked = javafind.pick_java(javas, mc_version)
-            return picked["path"] if picked else None
-        return javas[0]["path"]
+            return custom
+        need = javafind.required_major(mc_version) if mc_version else 0
+        declared = self._declared_java_major(mc_version) if mc_version else 0
+        if declared > need:
+            need = declared
+        if custom:
+            try:
+                cm = javafind.java_major(custom)
+            except Exception:
+                cm = 0
+            if cm and cm >= need and (not declared or cm == declared):
+                return custom  # 用户选择与版本声明一致，尊重之
+        picked = javafind.pick_java_with_need(javas, need)
+        if picked:
+            self.log(f"自动选择 Java {picked['major']}（版本声明/最低要求 {need}）", "dim")
+            return picked["path"]
+        return custom
 
     def on_close(self):
         config.set_many({"window_width": self.winfo_width(),

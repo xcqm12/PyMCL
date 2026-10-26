@@ -79,9 +79,39 @@ def _eval_args(arglist: list, tokens: dict, features: dict) -> list:
     return [a for a in out if a]
 
 
+def _patched_client_jar(merged: dict) -> Path | None:
+    """Forge/NeoForge 1.17+（BootstrapLauncher）：游戏本体是安装器产出的补丁 client jar。
+    原版 client jar 绝不能进类路径——它会被提升为模块 _1._20._1，与 FML 构建的
+    minecraft 模块冲突（ResolutionException）。"""
+    for lib in merged.get("libraries", []):
+        name = str(lib.get("name", ""))
+        if "fmlloader" not in name:
+            continue
+        parts = name.split(":")
+        if len(parts) < 3:
+            continue
+        mv = parts[2]
+        if "neoforged" in name:
+            candidates = [
+                f"net/neoforged/neoforge/{mv}/neoforge-{mv}-client.jar",
+                f"net/neoforged/forge/{mv}/forge-{mv}-client.jar",
+                f"net/minecraftforge/forge/{mv}/forge-{mv}-client.jar",
+            ]
+        else:
+            candidates = [f"net/minecraftforge/forge/{mv}/forge-{mv}-client.jar"]
+        for rel in candidates:
+            p = config.mc_root() / "libraries" / rel
+            if p.exists():
+                return p
+    return None
+
+
 def classpath_of(merged: dict, vid: str) -> list:
     libdir = config.mc_root() / "libraries"
     cps = []
+    main = str(merged.get("mainClass", ""))
+    is_bootstrap = "bootstraplauncher" in main
+    game_jar = _patched_client_jar(merged) if is_bootstrap else None
     for lib in merged.get("libraries", []):
         if not versions.lib_allowed(lib) or versions.native_classifier(lib):
             continue
@@ -89,10 +119,13 @@ def classpath_of(merged: dict, vid: str) -> list:
         jar = libdir / path
         if jar.exists():
             cps.append(str(jar))
-    base = merged.get("_base_id") or merged.get("id")
-    client = config.mc_root() / "versions" / str(base) / f"{base}.jar"
-    if client.exists():
-        cps.append(str(client))
+    if game_jar:
+        cps.append(str(game_jar))
+    else:
+        base = merged.get("_base_id") or merged.get("id")
+        client = config.mc_root() / "versions" / str(base) / f"{base}.jar"
+        if client.exists():
+            cps.append(str(client))
     return cps
 
 
