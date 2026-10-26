@@ -71,6 +71,15 @@ python tools/gui_smoke.py             # GUI 冒烟测试
 
 ## 更新日志
 
+### v1.1.3
+- 修复 Forge/NeoForge 启动崩溃（两处）：类路径改用补丁 client jar（原版 jar 进模块层与 FML 冲突）；
+  inheritsFrom 合并修正为父+子拼接（此前缺 --accessToken/--version）
+- 已实测 Forge 1.20.1-47.4.28 完整启动
+
+### v1.1.2
+- 修复 Forge/NeoForge 安装器联网失败：BMCLAPI 镜像预取依赖、launcher_profiles 桩文件、
+  安装器自动选 Java
+
 ### v1.0.9
 - 修复：XSTS 授权只接受受众为 `rp://api.minecraftservices.com/` 的令牌——此前回退到
   `http://xboxlive.com` 受众的令牌会导致 Minecraft 授权报 `Invalid app registration`
