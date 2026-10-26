@@ -6,7 +6,8 @@ from tkinter import ttk, filedialog, messagebox
 
 from mclauncher import config, javafind
 from gui import theme_bg
-from .theme import C, FONT, FONT_S, flat_button, ghost_button, label, make_entry, panel
+from .theme import (C, FONT, FONT_S, flat_button, ghost_button, label, make_entry, panel,
+                    ScrollableFrame)
 
 
 class SettingsPage(tk.Frame):
@@ -15,14 +16,14 @@ class SettingsPage(tk.Frame):
         self.app = app
         self._javas = []
 
-        outer = tk.Frame(self, bg=C["bg"])
-        outer.pack(fill="both", expand=True)
-        outer.pack_propagate(False)
+        self.scroll = ScrollableFrame(self, C["bg"])
+        self.scroll.pack(fill="both", expand=True)
 
-        p = panel(outer)
-        p.pack(fill="both", expand=True, padx=16, pady=16)
+        p = panel(self.scroll.inner)
+        p.pack(fill="x", padx=16, pady=16)
         inner = tk.Frame(p, bg=C["panel"])
-        inner.pack(fill="both", expand=True, padx=14, pady=12)
+        inner.pack(fill="x", padx=14, pady=12)
+        inner.columnconfigure(1, weight=1)
 
         r = 0
         def add_title(text):

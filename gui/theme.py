@@ -134,3 +134,36 @@ def make_text(parent, **kw):
 def label(parent, text, color=None, font=None, **kw):
     return tk.Label(parent, text=text, bg=kw.pop("bg", C["panel"]),
                     fg=color or C["fg"], font=font or FONT_S, **kw)
+
+
+class ScrollableFrame(tk.Frame):
+    """带鼠标滚轮的纵向滚动容器：内容放 self.inner。"""
+
+    def __init__(self, parent, bg=None, **kw):
+        bg = bg or C["bg"]
+        super().__init__(parent, bg=bg, **kw)
+        self.canvas = tk.Canvas(self, bg=bg, highlightthickness=0, bd=0)
+        self.vsb = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        self.canvas.configure(yscrollcommand=self.vsb.set)
+        self.vsb.pack(side="right", fill="y")
+        self.canvas.pack(side="left", fill="both", expand=True)
+        self.inner = tk.Frame(self.canvas, bg=bg)
+        self._win = self.canvas.create_window((0, 0), window=self.inner, anchor="nw")
+        self.inner.bind(
+            "<Configure>", lambda e: self.canvas.configure(scrollregion=self.canvas.bbox("all")))
+        self.canvas.bind(
+            "<Configure>", lambda e: self.canvas.itemconfigure(self._win, width=e.width))
+        self.canvas.bind("<Enter>", lambda e: self.canvas.bind_all("<MouseWheel>", self._on_wheel))
+        self.canvas.bind("<Leave>", lambda e: self.canvas.unbind_all("<MouseWheel>"))
+        self._unit = 2
+
+    def _on_wheel(self, e):
+        # 悬停在输入类控件上时不滚页面（避免与控件自身滚轮行为冲突）
+        try:
+            w = self.winfo_containing(e.x_root, e.y_root)
+            if isinstance(w, (ttk.Combobox, ttk.Spinbox, tk.Spinbox, tk.Text, tk.Listbox)):
+                return
+        except Exception:
+            pass
+        # 滚轮一格滚 2 个单位，触控板小增量也顺滑
+        self.canvas.yview_scroll(int(-1 * (e.delta / 120) * self._unit) or -self._unit, "units")
