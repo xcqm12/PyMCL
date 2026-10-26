@@ -4,10 +4,11 @@ import json
 import os
 import re
 import subprocess
+import urllib.parse
 import zipfile
 from pathlib import Path
 
-from . import config, net, versions
+from . import config, javafind, net, versions
 from .downloads import DownloadManager, Job, Task
 
 BMCLAPI = "https://bmclapi2.bangbang93.com"
@@ -30,7 +31,9 @@ def save_version_json(vj: dict, vid: str) -> Path:
 
 def run_installer(installer_url: str, name: str, java: str,
                   on_status=None, timeout: int = 1800) -> str:
-    """下载安装器并 headless 安装（Forge/NeoForge/Cleanroom 家族），返回新版本 id。"""
+    """下载安装器并 headless 安装（Forge/NeoForge/Cleanroom 家族），返回新版本 id。
+    安装前先通过镜像预取 install_profile.json 里声明的全部依赖库——
+    官方安装器直连 maven.minecraftforge.net，国内经常被阻断（exit=1 的主因）。"""
     root = config.mc_root()
     idir = root / "cache" / "installers"
     idir.mkdir(parents=True, exist_ok=True)
@@ -38,6 +41,19 @@ def run_installer(installer_url: str, name: str, java: str,
     if on_status:
         on_status(f"下载安装器 {name} …")
     net.download_stream(installer_url, jar)
+    # Forge 安装器要求存在 launcher_profiles.json（官方启动器档案文件），缺失会报
+    # "There is no Minecraft launcher profile"。写一个最小桩文件（HMCL/PCL 同款做法）。
+    profiles = root / "launcher_profiles.json"
+    if not profiles.exists():
+        profiles.write_text(json.dumps(
+            {"profiles": {}, "settings": {}, "version": 3}), "utf-8")
+    # 预取依赖（镜像加速）；失败不阻断——安装器还会自行校验/下载
+    try:
+        n = _prefetch_installer_libraries(jar, root, on_status)
+        if n and on_status:
+            on_status(f"已通过镜像预取 {n} 个安装器依赖（跳过被墙的直连下载）")
+    except Exception:
+        pass
     if on_status:
         on_status("运行安装器（可能需要几分钟）…")
     before = {d.name for d in (root / "versions").iterdir() if d.is_dir()}
@@ -53,6 +69,95 @@ def run_installer(installer_url: str, name: str, java: str,
             on_status(f"安装完成：{new[0]}")
         return new[0]
     raise InstallError(f"安装器未产生新版本 (exit={proc.returncode})。\n{out[-800:]}")
+
+
+def _prefetch_installer_libraries(installer_jar: Path, root: Path, on_status=None) -> int:
+    """解析安装器的 install_profile.json，经镜像预取全部依赖库到 libraries/。
+    安装器对已存在且校验通过的文件会跳过下载，从而不依赖直连 forge maven。"""
+    with zipfile.ZipFile(installer_jar) as z:
+        profile = json.loads(z.read("install_profile.json").decode("utf-8", "replace"))
+    libdir = root / "libraries"
+    tasks, seen = [], set()
+
+    def add_lib(lib: dict):
+        name = lib.get("name") or ""
+        if not name or name in seen:
+            return
+        seen.add(name)
+        dl = (lib.get("downloads") or {}).get("artifact") or {}
+        path = dl.get("path")
+        if not path:
+            try:
+                path = versions.maven_path(name)
+            except Exception:
+                return
+        dest = libdir / path
+        if dest.exists():
+            return
+        url = (dl.get("url") or "").strip()
+        if url:
+            # install_profile 里的 url 可能是完整 URL（含文件名）或基目录，判断区分
+            if Path(urllib.parse.urlparse(url).path).name == Path(path).name:
+                pass  # 已是完整 URL
+            else:
+                url = url.rstrip("/") + "/" + path
+        else:
+            url = f"https://maven.minecraftforge.net/{path}"
+        sha1 = dl.get("sha1")
+        tasks.append(Task(url, dest, sha1=sha1, label=path))
+
+    for lib in profile.get("libraries", []):
+        add_lib(lib)
+    vi = profile.get("versionInfo") or {}
+    if isinstance(vi, dict):
+        for lib in vi.get("libraries", []):
+            add_lib(lib)
+
+    ok, fail = 0, 0
+    for t in tasks:
+        try:
+            net.download_stream(t.url, t.dest, sha1=t.sha1)
+            ok += 1
+        except net.NetError:
+            fail += 1  # 安装器随后自行重试直连（可能成功）
+    if fail and on_status:
+        on_status(f"警告：{fail} 个依赖镜像预取失败，将由安装器直连重试")
+    return ok
+
+
+def _pick_java_for(mc: str, fallback: str | None) -> str | None:
+    """为加载器安装器挑选 Java：旧版（<1.17）优先 Java 8（老安装器在新 Java 上易崩），
+    新版挑满足要求的最低版本。"""
+    fallback = fallback or (javafind.detect_javas() or [{}])[0].get("path")
+    try:
+        javas = javafind.detect_javas()
+        if not javas:
+            return fallback
+        need = javafind.required_major(mc)
+        if need <= 8:
+            j8 = [j for j in javas if j["major"] == 8]
+            if j8:
+                return j8[0]["path"]
+            return fallback  # 没有 8 就用现成的（老安装器可能仍可运行）
+        ok = [j for j in javas if j["major"] >= need]
+        if ok:
+            ok.sort(key=lambda x: x["major"])
+            return ok[0]["path"]
+        return fallback
+    except Exception:
+        return fallback
+
+
+def _ensure_vanilla_for_installer(mc: str, on_status=None):
+    """安装器需要原版 client jar 与相关库；先用镜像准备好（失败不阻断）。"""
+    try:
+        if versions.load_json(mc) is None:
+            versions.fetch_version_json(mc)
+        versions.ensure_version(mc, DownloadManager(), skip_assets=True,
+                                on_status=on_status)
+    except Exception as e:
+        if on_status:
+            on_status(f"原版文件预下载失败（安装器将自行下载）: {e}")
 
 
 # ---------------- 原版 ----------------
@@ -117,9 +222,11 @@ def list_forge(mc: str) -> list:
 
 def install_forge(mc: str, ver: str, java: str, on_status=None) -> str:
     full = f"{mc}-{ver}"
+    _ensure_vanilla_for_installer(mc, on_status)
     installer = (f"{BMCLAPI}/maven/net/minecraftforge/forge/{full}/"
                  f"forge-{full}-installer.jar")
-    return run_installer(installer, f"forge-{full}-installer.jar", java, on_status)
+    return run_installer(installer, f"forge-{full}-installer.jar",
+                         _pick_java_for(mc, java), on_status)
 
 
 # ---------------- NeoForge ----------------
@@ -143,7 +250,9 @@ def install_neoforge(mc: str, ver: str, java: str, on_status=None) -> str:
         artifact = "neoforge"
     installer = (f"{BMCLAPI}/maven/net/neoforged/{artifact}/{full}/"
                  f"{artifact}-{full}-installer.jar")
-    return run_installer(installer, f"neoforge-{full}-installer.jar", java, on_status)
+    _ensure_vanilla_for_installer(mc, on_status)
+    return run_installer(installer, f"neoforge-{full}-installer.jar",
+                         _pick_java_for(mc, java), on_status)
 
 
 # ---------------- OptiFine ----------------
@@ -300,7 +409,8 @@ def install_cleanroom(java: str, on_status=None) -> str:
     if not rels:
         raise InstallError("未能获取 Cleanroom 版本列表")
     latest = rels[0]
-    return run_installer(latest["url"], latest["name"], java, on_status)
+    return run_installer(latest["url"], latest["name"],
+                         _pick_java_for("1.12.2", java), on_status)
 
 
 # ---------------- LabyMod ----------------
