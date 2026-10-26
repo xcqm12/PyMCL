@@ -240,7 +240,8 @@ class MarketPage(tk.Frame):
 
     def reload_targets(self):
         vals = ["任何版本"]
-        vals += [v["id"] for v in versions.installed_versions()]
+        vals += [f"{'◆ ' if config.is_isolated(v['id']) else ''}{v['id']}"
+                 for v in versions.installed_versions()]
         try:
             m = versions.manifest()
             vals += [v["id"] for v in m.get("versions", [])
@@ -272,6 +273,8 @@ class MarketPage(tk.Frame):
 
     def filter_base(self) -> str | None:
         v = self.ver_var.get()
+        if v.startswith("◆ "):
+            v = v[2:]
         return None if v in ("任何版本", "") else v
 
     def filter_loader(self) -> str | None:

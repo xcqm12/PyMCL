@@ -47,6 +47,16 @@ class SettingsPage(tk.Frame):
         flat_button(dirrow, "打开", command=self._open_dir, padx=8, pady=2).pack(side="left")
         add_row("游戏根目录", dirrow, )
 
+        self.iso_all_var = tk.BooleanVar(value=bool(config.get("isolate_all", False)))
+        ttk.Checkbutton(inner, text="新安装的版本默认启用版本隔离（每个版本独立存档/模组/配置）",
+                        variable=self.iso_all_var).grid(row=r, column=1, columnspan=2,
+                                                        sticky="w", pady=4)
+        r += 1
+        label(inner, "说明：单版本的隔离开关在「主页」版本选择旁；整合包始终使用独立目录。",
+              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        r += 1
+
         # Java
         add_title("Java")
         jrow = tk.Frame(inner, bg=C["panel"])
@@ -236,6 +246,7 @@ class SettingsPage(tk.Frame):
             "msa_client_id": self.cid_var.get().strip(),
             "msa_client_secret": self.secret_var.get().strip(),
             "bg_url": self.bg_url_var.get().strip(),
+            "isolate_all": bool(self.iso_all_var.get()),
         }
         if not updates["java_path"]:
             updates["java_path"] = ""

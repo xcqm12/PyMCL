@@ -52,10 +52,14 @@ class HomePage(tk.Frame):
         label(verrow, "版本", color=C["dim"]).pack(side="left")
         self.ver_var = tk.StringVar()
         self.ver_combo = ttk.Combobox(verrow, textvariable=self.ver_var, state="readonly",
-                                      font=FONT_S, width=36)
+                                      font=FONT_S, width=30)
         self.ver_combo.pack(side="left", padx=8)
         self.ver_combo.bind("<<ComboboxSelected>>", lambda e: self._update_dir())
-        ghost_button(verrow, "刷新", command=self.app.refresh_versions, padx=8, pady=2).pack(side="left")
+        self.iso_btn = ghost_button(verrow, "启用版本隔离", command=self.toggle_isolation,
+                                    padx=8, pady=2)
+        self.iso_btn.pack(side="left")
+        ghost_button(verrow, "刷新", command=self.app.refresh_versions, padx=8, pady=2).pack(
+            side="left")
 
         self.dir_label = label(left, "", color=C["dim"], font=FONT_XS)
         self.dir_label.pack(anchor="w", pady=(8, 0))
@@ -138,11 +142,16 @@ class HomePage(tk.Frame):
 
     def reload(self):
         vs = versions.installed_versions()
-        display = [f"{'★ ' if v['custom_dir'] else ''}{v['id']}" for v in vs]
+        prev = self.selected_version()
+        display = [f"{'◆ ' if config.is_isolated(v['id']) else ''}{v['id']}" for v in vs]
         self._versions = vs
         self.ver_combo.config(values=display)
-        if display and (not self.ver_var.get() or self.ver_var.get() not in display):
-            self.ver_var.set(display[0])
+        if display:
+            keep = next((d for d in display if d.lstrip("◆ ") == (prev or "")), None)
+            if keep and keep in display:
+                self.ver_var.set(keep)
+            elif not self.ver_var.get() or self.ver_var.get() not in display:
+                self.ver_var.set(display[0])
         account = config.active_account()
         if account:
             t = "微软正版" if account.get("type") == "msa" else "离线"
@@ -154,16 +163,46 @@ class HomePage(tk.Frame):
 
     def _update_dir(self):
         vid = self.selected_version()
-        if vid:
-            try:
-                d = config.game_dir_for(vid)
-                self.dir_label.config(text=f"游戏目录：{d}")
-            except Exception:
-                self.dir_label.config(text="")
+        if not vid:
+            self.iso_btn.config(text="启用版本隔离", state="disabled")
+            self.dir_label.config(text="")
+            return
+        self.iso_btn.config(state="normal")
+        if config.is_isolated(vid):
+            self.iso_btn.config(text="关闭版本隔离")
+        else:
+            self.iso_btn.config(text="启用版本隔离")
+        try:
+            d = config.game_dir_for(vid)
+            mark = "（版本隔离）" if config.is_isolated(vid) else ""
+            self.dir_label.config(text=f"游戏目录{mark}：{d}")
+        except Exception:
+            self.dir_label.config(text="")
+
+    def toggle_isolation(self):
+        vid = self.selected_version()
+        if not vid:
+            return
+        target = config.is_isolated(vid)
+        # 整合包目录（注册在 game_dirs 的独立目录）不建议关闭
+        if target and vid in config.get("game_dirs", {}):
+            messagebox.showinfo("提示", "该版本使用整合包的独立目录，不建议关闭隔离。")
+            return
+        if not target:
+            if not messagebox.askyesno(
+                    "启用版本隔离",
+                    f"将为 {vid} 启用独立游戏目录：\n"
+                    f"{config.mc_root() / 'versions' / vid}\n\n"
+                    "根目录里的存档/配置/模组会复制一份过去（原文件保留）。\n"
+                    "之后该版本的存档、模组、设置均与其他版本互不影响。继续？"):
+                return
+        config.set_isolated(vid, not target)
+        self.app.log(f"{'已启用' if not target else '已关闭'}版本隔离：{vid}", "ok")
+        self.reload()
 
     def selected_version(self):
         raw = self.ver_var.get()
-        return raw[2:] if raw.startswith("★ ") else raw or None
+        return raw[2:] if raw.startswith("◆ ") else raw or None
 
     def _open_dir(self):
         vid = self.selected_version()

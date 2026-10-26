@@ -71,6 +71,11 @@ python tools/gui_smoke.py             # GUI 冒烟测试
 
 ## 更新日志
 
+### v1.1.4
+- 新增版本隔离：主页版本选择旁一键开关，为单个版本启用独立游戏目录
+  （存档/模组/配置自动复制迁移）；设置页可设「新版本默认隔离」；
+  版本列表与市场目标下拉用 ◆ 标记隔离版本
+
 ### v1.1.3
 - 修复 Forge/NeoForge 启动崩溃（两处）：类路径改用补丁 client jar（原版 jar 进模块层与 FML 冲突）；
   inheritsFrom 合并修正为父+子拼接（此前缺 --accessToken/--version）
