@@ -95,7 +95,8 @@ def _deps_ok(adir: Path, node: str) -> bool:
     """require 冒烟：npm 安装成功且模块可加载（镜像大包残缺时也能发现）。"""
     try:
         r = subprocess.run(
-            [node, "-e", "require('mineflayer');require('mineflayer-pathfinder')"],
+            [node, "-e", "require('mineflayer');require('mineflayer-pathfinder');"
+                        "require('mineflayer-collectblock');require('adm-zip')"],
             cwd=str(adir), capture_output=True, text=True, timeout=60,
             creationflags=CREATE_NO_WINDOW)
         return r.returncode == 0

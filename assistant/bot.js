@@ -10,7 +10,9 @@ const fs = require('fs');
 const path = require('path');
 const mineflayer = require('mineflayer');
 const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
+const collectBlock = require('mineflayer-collectblock');
 const recipes = require('./recipes');
+const craft = require('./craft');
 
 // ---------------- 配置 ----------------
 const argv = process.argv.slice(2);
@@ -58,6 +60,7 @@ let failCount = 0;
 let greeted = false;
 let following = false;
 let recipeIndex = null;           // 配方知识库（原版 + 模组）
+let craftBusy = false;            // 同时只跑一个自动制作任务
 const history = new Map();        // player -> [{role, content}]，每玩家最多 8 轮
 const cooldown = new Map();       // player -> last reply ts
 const recentMsgs = new Map();     // 去重 key -> ts（chat 事件与 messagestr 回退共用）
@@ -251,6 +254,24 @@ async function handleDirected(username, raw) {
     return;
   }
 
+  // 自动收集并制作：「帮我做钻石剑」「帮我收集材料合成附魔台」
+  let mc;
+  if ((mc = /^帮我(?:帮我)?(?:收集|采集|准备)?(?:一下)?(?:材料)?(?:并)?(?:做|合成|制作|做出|制作出)\s*[:：]?\s*(.+)$/.exec(text)) ||
+      (mc = /^(?:帮我|麻烦你)(?:做|合成|制作|做出|制作出)(?:一个|一把|一组|一块)?\s*(.+)$/.exec(text))) {
+    if (craftBusy) {
+      say('我还在忙上一个制作任务呢，做完叫我～');
+      return;
+    }
+    craftBusy = true;
+    craft.handleCraft(bot, username, mc[1].trim(), { say, sayChunks, index: recipeIndex, log })
+      .catch((e) => {
+        log('自动制作失败:', e.message);
+        sayChunks(`制作出问题了: ${String(e.message).slice(0, 60)}`);
+      })
+      .finally(() => { craftBusy = false; });
+    return;
+  }
+
   // 配方知识库：怎么做X / X的配方 / X能做什么
   let m;
   if ((m = /^(?:怎么(?:合成|做|获得)|如何合成|如何制作|配方|搜(?:索)?配方|查配方|recipe\s*(?:for|of)?)\s*[:：]?\s*(.+)$/.exec(text))) {
@@ -269,6 +290,8 @@ async function handleDirected(username, raw) {
   if (/^(帮助|指令|菜单|help|commands?)$/.test(t)) {
     sayChunks('对我的指令：跟我来 / 停下 / 报坐标 / 时间 / 天气 / 查背包 / 传我；' +
       `查配方:「怎么做钻石剑」「钻石能做什么」（原版+模组配方都记着呢）；` +
+      `自动制作:「帮我做钻石剑」——缺的材料我去附近箱子拿、能挖的自己挖，` +
+      `中间材料（木板/木棍等）自动合成，做完扔给你；` +
       `其他内容直接和${BOT_NAME}聊天就好～`);
     return;
   }
@@ -365,6 +388,7 @@ function createBot() {
     hideErrors: false,
   });
   bot.loadPlugin(pathfinder);
+  bot.loadPlugin(collectBlock.plugin);
 
   bot.on('login', () => {
     failCount = 0;

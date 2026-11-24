@@ -13,6 +13,7 @@ python -m PyInstaller --noconfirm --onefile --windowed --clean ^
   --add-data "assets;assets" ^
   --add-data "assistant/bot.js;assistant" ^
   --add-data "assistant/recipes.js;assistant" ^
+  --add-data "assistant/craft.js;assistant" ^
   --add-data "assistant/package.json;assistant" ^
   --add-data "assistant/AuroraAI.png;assistant" ^
   --add-data "assistant/CustomSkinLoader_Universal-15.1.jar;assistant" ^

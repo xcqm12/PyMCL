@@ -21,3 +21,6 @@ cache/
 
 # AI 助手运行时目录（bot.js/package.json 等源文件随包分发，node_modules 由 npm 安装）
 assistant/node_modules/
+
+# 配方库测试生成的模拟模组 jar
+tools/fake_mods/

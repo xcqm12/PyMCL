@@ -291,6 +291,13 @@ function buildIndex({ mcVersion, modsDirs, log } = {}) {
     recipesOf(id, limit = 2) {
       return (byResult.get(id) || []).slice(0, limit).map(recipeText);
     },
+    planOf(id) {
+      // 返回该物品首个可合成（crafting）配方的原始结构，供自动制作展开；
+      // 若只有熔炼/切割类配方也返回（调用方自行拒绝），无配方返回 null
+      const list = byResult.get(id) || [];
+      return list.find((r) => r.type === 'crafting_shaped' || r.type === 'crafting_shapeless')
+        || list[0] || null;
+    },
     search(q) {
       const ids = findIds(q);
       return ids.map((id) => ({
