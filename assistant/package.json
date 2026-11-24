@@ -1,0 +1,12 @@
+{
+  "name": "pymcl-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "PyMCL AI assistant bot (mineflayer)",
+  "main": "bot.js",
+  "dependencies": {
+    "adm-zip": "^0.5.16",
+    "mineflayer": "^4.20.0",
+    "mineflayer-pathfinder": "^2.4.5"
+  }
+}

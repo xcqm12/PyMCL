@@ -35,6 +35,16 @@ DEFAULTS = {
     "isolate_all": False,
     # 正式打包版默认隐藏备用授权设置，开发运行默认显示；账户页可手动切换
     "show_backup_auth": not getattr(sys, "frozen", False),
+    # AI 助手（mineflayer 机器人，随游戏启动陪玩；皮肤经 CSL LocalSkin 渲染）
+    "assistant_enabled": False,
+    "assistant_name": "AuroraAI",
+    "assistant_server": "",            # 例 1.2.3.4:25565 或 mc.example.com
+    "assistant_provider": "deepseek",  # deepseek | glm
+    "assistant_api_key_deepseek": "",
+    "assistant_api_key_glm": "",
+    "assistant_model": "",             # 留空用提供商默认模型
+    "assistant_persona": "",           # 留空用内置哥特萝莉人设
+    "assistant_mods_dir": "",          # 额外的模组目录（配方知识库扫描用，可选）
 }
 
 

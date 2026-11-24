@@ -137,6 +137,59 @@ class SettingsPage(tk.Frame):
         ghost_button(trow, "换一张", command=self._new_bg, padx=10, pady=2).pack(side="left", padx=6)
         add_row("背景图地址", trow)
 
+        # AI 助手
+        add_title("AI 助手")
+        self.assistant_var = tk.BooleanVar(value=bool(config.get("assistant_enabled", False)))
+        ttk.Checkbutton(inner, text="随游戏启动 AI 助手机器人（同服陪玩，穿哥特皮肤）",
+                        variable=self.assistant_var).grid(row=r, column=1, columnspan=2,
+                                                          sticky="w", pady=4)
+        r += 1
+        self.as_name_var = tk.StringVar(value=config.get("assistant_name", "AuroraAI"))
+        add_row("助手游戏 ID", make_entry(inner, textvariable=self.as_name_var, width=20))
+        label(inner, "ID 同时是本地皮肤文件名（CustomSkinLoader 的 LocalSkin/<ID>.png），"
+                     "启动游戏时会自动部署。",
+              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        r += 1
+        self.as_server_var = tk.StringVar(value=config.get("assistant_server", ""))
+        add_row("服务器地址", make_entry(inner, textvariable=self.as_server_var, width=30))
+        label(inner, "助手加入的服务器，格式 IP:端口（省略端口用 25565）。"
+                     "需要离线验证服务器（online-mode=false）；正版验证服务器机器人无法加入。",
+              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        r += 1
+        prow = tk.Frame(inner, bg=C["panel"])
+        self.as_provider_var = tk.StringVar(value="智谱 GLM" if str(
+            config.get("assistant_provider", "deepseek")).lower().startswith(
+            ("glm", "zhipu", "bigmodel")) else "DeepSeek")
+        ttk.Combobox(prow, textvariable=self.as_provider_var, state="readonly",
+                     values=["DeepSeek", "智谱 GLM"], width=12,
+                     font=FONT_S).pack(side="left")
+        label(prow, "（陪聊用；未填 Key 时只执行指令不聊天）", bg=C["panel"],
+              color=C["dim"]).pack(side="left", padx=6)
+        add_row("AI 提供商", prow)
+        self.as_ds_var = tk.StringVar(value=config.get("assistant_api_key_deepseek", ""))
+        add_row("DeepSeek Key", make_entry(inner, textvariable=self.as_ds_var, width=46, show="•"))
+        self.as_glm_var = tk.StringVar(value=config.get("assistant_api_key_glm", ""))
+        add_row("智谱 GLM Key", make_entry(inner, textvariable=self.as_glm_var, width=46, show="•"))
+        self.as_model_var = tk.StringVar(value=config.get("assistant_model", ""))
+        add_row("模型（可空）", make_entry(inner, textvariable=self.as_model_var, width=30))
+        label(inner, "留空使用默认：DeepSeek 用 deepseek-chat，智谱用 glm-4-flash。",
+              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        r += 1
+        self.as_persona_var = tk.StringVar(value=config.get("assistant_persona", ""))
+        add_row("人设提示词", make_entry(inner, textvariable=self.as_persona_var, width=46))
+        self.as_mods_var = tk.StringVar(value=config.get("assistant_mods_dir", ""))
+        add_row("模组目录(可选)", make_entry(inner, textvariable=self.as_mods_var, width=46))
+        label(inner, "助手会牢记原版与模组配方（聊天问「怎么做钻石剑」「XX能做什么」）；"
+                     "留空只扫描当前游戏目录与启动器根目录的 mods，"
+                     "玩 PCL 整合包时可把其 mods 目录填到这里。"
+                     "首次启动需已安装 Node.js（18+），依赖自动安装。",
+              color=C["dim"], bg=C["panel"], wraplength=560, justify="left").grid(
+            row=r, column=1, columnspan=2, sticky="w", pady=(0, 6))
+        r += 1
+
         # 保存
         btns = tk.Frame(inner, bg=C["panel"])
         btns.grid(row=r, column=0, columnspan=3, sticky="w", pady=(14, 0))
@@ -153,6 +206,17 @@ class SettingsPage(tk.Frame):
     def on_show(self):
         self.dir_var.set(config.get("mc_root"))
         self.anime_var.set(bool(config.get("anime_bg")))
+        self.assistant_var.set(bool(config.get("assistant_enabled", False)))
+        self.as_name_var.set(config.get("assistant_name", "AuroraAI"))
+        self.as_server_var.set(config.get("assistant_server", ""))
+        self.as_provider_var.set(
+            "智谱 GLM" if str(config.get("assistant_provider", "deepseek")).lower().startswith(
+                ("glm", "zhipu", "bigmodel")) else "DeepSeek")
+        self.as_ds_var.set(config.get("assistant_api_key_deepseek", ""))
+        self.as_glm_var.set(config.get("assistant_api_key_glm", ""))
+        self.as_model_var.set(config.get("assistant_model", ""))
+        self.as_persona_var.set(config.get("assistant_persona", ""))
+        self.as_mods_var.set(config.get("assistant_mods_dir", ""))
 
     def _browse_dir(self):
         d = filedialog.askdirectory(title="选择游戏根目录")
@@ -248,6 +312,16 @@ class SettingsPage(tk.Frame):
             "msa_client_secret": self.secret_var.get().strip(),
             "bg_url": self.bg_url_var.get().strip(),
             "isolate_all": bool(self.iso_all_var.get()),
+            "assistant_enabled": bool(self.assistant_var.get()),
+            "assistant_name": self.as_name_var.get().strip() or "AuroraAI",
+            "assistant_server": self.as_server_var.get().strip(),
+            "assistant_provider": ("glm" if self.as_provider_var.get().startswith("智谱")
+                                   else "deepseek"),
+            "assistant_api_key_deepseek": self.as_ds_var.get().strip(),
+            "assistant_api_key_glm": self.as_glm_var.get().strip(),
+            "assistant_model": self.as_model_var.get().strip(),
+            "assistant_persona": self.as_persona_var.get().strip(),
+            "assistant_mods_dir": self.as_mods_var.get().strip(),
         }
         if not updates["java_path"]:
             updates["java_path"] = ""

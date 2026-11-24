@@ -4,7 +4,7 @@ import time
 import tkinter as tk
 from tkinter import ttk, messagebox
 
-from mclauncher import auth, config, launch, versions
+from mclauncher import auth, config, launch, versions, assistant
 from gui import theme_bg
 from .theme import (C, FONT, FONT_S, FONT_XS, FONT_B, FONT_XB,
                     flat_button, primary_button, ghost_button, label, make_text, card)
@@ -58,6 +58,9 @@ class HomePage(tk.Frame):
         self.iso_btn = ghost_button(verrow, "启用版本隔离", command=self.toggle_isolation,
                                     padx=8, pady=2)
         self.iso_btn.pack(side="left")
+        self.as_btn = ghost_button(verrow, "助手: 关", command=self.toggle_assistant,
+                                   padx=8, pady=2)
+        self.as_btn.pack(side="left", padx=(8, 0))
         ghost_button(verrow, "刷新", command=self.app.refresh_versions, padx=8, pady=2).pack(
             side="left")
 
@@ -158,6 +161,7 @@ class HomePage(tk.Frame):
             self.acc_chip.config(text=f"{account.get('name')}（{t}）", fg=C["fg"])
         else:
             self.acc_chip.config(text="未登录 - 请到「账户」添加", fg=C["dim"])
+        self.as_btn.config(text=f"助手: {'开' if config.get('assistant_enabled', False) else '关'}")
         self._update_banner_texts()
         self._update_dir()
 
@@ -198,6 +202,15 @@ class HomePage(tk.Frame):
                 return
         config.set_isolated(vid, not target)
         self.app.log(f"{'已启用' if not target else '已关闭'}版本隔离：{vid}", "ok")
+        self.reload()
+
+    def toggle_assistant(self):
+        val = not bool(config.get("assistant_enabled", False))
+        config.set("assistant_enabled", val)
+        if val and not (config.get("assistant_server") or "").strip():
+            self.app.log("AI 助手已开启，但还没填服务器地址（设置页 → AI 助手）", "warn")
+        else:
+            self.app.log(f"AI 助手{'已开启，下次启动游戏时随游戏上线' if val else '已关闭'}", "ok")
         self.reload()
 
     def selected_version(self):
@@ -257,6 +270,14 @@ class HomePage(tk.Frame):
                 self.app.log(f"游戏已启动 (PID {proc.pid})，游戏目录 {game_dir}", "ok")
                 self.app.set_status("游戏运行中")
                 self.app.progress(None)
+                if config.get("assistant_enabled", False):
+                    if not (config.get("assistant_server") or "").strip():
+                        self.app.log("AI 助手已启用但未填服务器地址（设置页 → AI 助手），本次跳过",
+                                     "warn")
+                    else:
+                        assistant.start_with_game(game_dir, info.name, proc,
+                                                  on_log=self.app.log)
+                        self.app.log("AI 助手正在随游戏启动，稍后自动加入服务器…", "ok")
             except Exception as e:
                 self.app.log(f"启动失败: {e}", "err")
                 self.app.set_status(f"启动失败: {e}", True)
