@@ -11,6 +11,11 @@ python -m PyInstaller --noconfirm --onefile --windowed --clean ^
   --name PyMCL ^
   --icon assets\logo.ico ^
   --add-data "assets;assets" ^
+  --add-data "assistant/bot.js;assistant" ^
+  --add-data "assistant/recipes.js;assistant" ^
+  --add-data "assistant/package.json;assistant" ^
+  --add-data "assistant/AuroraAI.png;assistant" ^
+  --add-data "assistant/CustomSkinLoader_Universal-15.1.jar;assistant" ^
   main.py
 if errorlevel 1 goto fail
 

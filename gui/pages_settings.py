@@ -4,7 +4,7 @@ import subprocess
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 
-from mclauncher import config, javafind
+from mclauncher import config, javafind, __version__ as PYMCL_VERSION
 from gui import theme_bg
 from .theme import (C, FONT, FONT_S, flat_button, ghost_button, label, make_entry, panel,
                     ScrollableFrame)
@@ -196,7 +196,7 @@ class SettingsPage(tk.Frame):
         flat_button(btns, "保存设置", command=self.save, bg=C["accent"], padx=16).pack(side="left")
         flat_button(btns, "打开安装器缓存目录", command=self._open_cache, padx=10).pack(side="left", padx=8)
         r += 1
-        label(inner, "PyMCL v1.0.0 - 用 Python 编写的 Minecraft 启动器（仅用于学习交流；"
+        label(inner, f"PyMCL v{PYMCL_VERSION} - 用 Python 编写的 Minecraft 启动器（仅用于学习交流；"
                      "正版登录与游戏文件下载分别使用 Microsoft 官方接口与 Mojang/BMCLAPI 公共资源）",
               color=C["dim"], bg=C["panel"], wraplength=640, justify="left").grid(
             row=r, column=0, columnspan=3, sticky="w", pady=(12, 0))
